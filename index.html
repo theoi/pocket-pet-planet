@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6d6e8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23bfe9c9'/><circle cx='38' cy='45' r='6' fill='%233d3047'/><circle cx='62' cy='45' r='6' fill='%233d3047'/></svg>" />
+    <title>Pocket Pet Planet</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <header class="title">
+      <h1>Pocket Pet Planet</h1>
+      <p id="hint">Drag to spin · Scroll or pinch to zoom · Tap a critter</p>
+    </header>
+    <div id="tag" class="tag hidden"></div>
+    <div id="floaters"></div>
+    <section id="panel" class="panel hidden" aria-live="polite">
+      <button id="close" class="close" aria-label="Close">×</button>
+      <div class="row head">
+        <span id="moodEmoji" class="mood-emoji">😊</span>
+        <div class="names">
+          <div id="petName" class="pet-name">Mochi</div>
+          <div id="petForm" class="pet-form">Baby Mochi</div>
+        </div>
+      </div>
+      <form id="renameForm" class="rename hidden">
+        <input id="renameInput" maxlength="16" autocomplete="off" aria-label="New name" />
+        <button type="submit" class="btn small">Save</button>
+      </form>
+      <div class="mood-line">Mood: <b id="moodLabel">Happy</b></div>
+      <div class="bar"><span>Tummy</span><div class="track"><div id="foodBar" class="fill food"></div></div></div>
+      <div class="bar"><span>Joy</span><div class="track"><div id="joyBar" class="fill joy"></div></div></div>
+      <div class="bar"><span>Care</span><div class="track"><div id="careBar" class="fill care"></div></div></div>
+      <div id="careNote" class="care-note"></div>
+      <div class="row actions">
+        <button id="feedBtn" class="btn">🍓 Feed</button>
+        <button id="petBtn" class="btn">💗 Pet</button>
+        <button id="renameBtn" class="btn">✏️ Rename</button>
+      </div>
+    </section>
+    <section id="debug" class="debug hidden">
+      <b>debug</b>
+      <button id="dbgFF">+4h</button>
+      <button id="dbgEvolve">evolve</button>
+      <button id="dbgReset">reset</button>
+    </section>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
