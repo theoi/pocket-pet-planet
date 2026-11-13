@@ -1127,7 +1127,9 @@ function visitTick(force = false) {
       if (!decorList.includes(v.decor) || p === selected || (v.arrived && now > v.until)) endVisit(p);
       continue;
     }
-    if (!spots.length || p === selected || p.goal || p.evolving || p.sleeping || (!force && Math.random() > 0.12)) continue;
+    // Company is catching: a pet is likelier to wander over when someone is already at a spot nearby.
+    const busyNear = [...visits.values()].some((v) => v.arrived && p.up.angleTo(new THREE.Vector3(...v.decor.data.pos)) < 1.1);
+    if (!spots.length || p === selected || p.goal || p.evolving || p.sleeping || (!force && Math.random() > (busyNear ? 0.4 : 0.12))) continue;
     // Friends like to share: head for a spot a friend is already visiting if it's in reach.
     const pals = new Set(friendsOf(friends, p.data.id).filter((f) => f.points >= LEVELS[1].min).map((f) => f.id));
     const shared = (d: Decor) => [...visits].some(([q, v]) => v.decor === d && pals.has(q.data.id));
@@ -1146,6 +1148,8 @@ function visitFrame(now: number) {
     if (!v.arrived && p.goal && p.up.angleTo(p.goal) < 0.05) {
       v.arrived = now;
       v.until = now + (v.kind === 'nap' ? 20_000 + Math.random() * 15_000 : 12_000 + Math.random() * 8_000);
+      // Whoever is already there stays a bit longer to keep the newcomer company.
+      for (const [q, w] of visits) if (q !== p && w.decor === v.decor && w.arrived) w.until = Math.max(w.until, now + 10_000);
       if (v.kind === 'hang') fx.hearts(p.headWorld(), p.up, 3);
       else if (![...visits].some(([q, w]) => q !== p && w.decor === v.decor))
         noteNow('😴', `${p.data.name} took a nap in the ${DECOR_KINDS.find((k) => k.kind === v.decor.data.kind)!.name.toLowerCase()}`, 6 * HOUR);
