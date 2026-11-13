@@ -296,8 +296,26 @@ const clock = new THREE.Clock();
 let panelTimer = 0;
 let twinkleTimer = 0;
 const tagPos = new THREE.Vector3();
+// Weak GPUs (and software rendering) get a lower pixel ratio rather than a sluggish planet.
+let perfFrames = 0;
+let perfTime = 0;
+function adaptQuality(raw: number) {
+  if (perfFrames < 0) return;
+  perfFrames++;
+  perfTime += raw;
+  if (perfTime < 2) return;
+  const avg = perfTime / perfFrames;
+  const ratio = renderer.getPixelRatio();
+  if (avg > 0.045 && ratio > 1) renderer.setPixelRatio(Math.max(1, ratio / 2));
+  else if (avg > 0.045 && ratio > 0.75) renderer.setPixelRatio(0.75);
+  else perfFrames = -1;
+  if (perfFrames >= 0) perfFrames = perfTime = 0;
+}
+
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(0.05, clock.getDelta());
+  const raw = clock.getDelta();
+  adaptQuality(raw);
+  const dt = Math.min(0.1, raw);
   const t = clock.elapsedTime;
   for (const p of pets) {
     decay(p.data, dt * 1000);
