@@ -1,6 +1,23 @@
 import * as THREE from 'three';
 import type { Festival, Season } from './seasons';
 import { toon } from './toon';
+
+// Worn items get their own materials with a soft self-glow that the night turns up, so a hat on a sleeping
+// pet still reads in the dark. Separate from the shared world materials so nothing else glows.
+const wornMats = new Map<string, THREE.MeshToonMaterial>();
+function worn(color: string): THREE.MeshToonMaterial {
+  let m = wornMats.get(color);
+  if (!m) {
+    m = toon(color).clone();
+    m.emissive = new THREE.Color(color);
+    m.emissiveIntensity = 0;
+    wornMats.set(color, m);
+  }
+  return m;
+}
+export function setWornGlow(k: number): void {
+  for (const m of wornMats.values()) m.emissiveIntensity = k;
+}
 import { pumpkin } from './world';
 
 export type Slot = 'head' | 'neck';
@@ -62,7 +79,7 @@ const cyl = new THREE.CylinderGeometry(1, 1, 1, 24);
 
 type V3 = [number, number, number];
 function m(geo: THREE.BufferGeometry, color: string, pos: V3, scale: V3, rot: V3 = [0, 0, 0]): THREE.Mesh {
-  const x = new THREE.Mesh(geo, toon(color));
+  const x = new THREE.Mesh(geo, worn(color));
   x.position.set(...pos);
   x.scale.set(...scale);
   x.rotation.set(...rot);
@@ -95,7 +112,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     case 'beanie': {
       g.position.set(0, 1.7, 0);
       g.rotation.x = -0.12;
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon('#c8b6ff'));
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), worn('#c8b6ff'));
       cap.scale.set(0.72, 0.5, 0.72);
       g.add(cap);
       g.add(m(cyl, '#b39cf5', [0, 0.02, 0], [0.74, 0.1, 0.74]));
@@ -105,7 +122,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     case 'flowers': {
       g.position.set(0, 1.72, 0);
       g.rotation.x = -0.15;
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.045, 8, 36), toon('#95d5b2'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.045, 8, 36), worn('#95d5b2'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       const cols = ['#ffafcc', '#fdffb6', '#cdb4db', '#ffffff', '#ffc8a2'];
@@ -139,7 +156,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'scarf': {
       g.position.set(0, 0.6, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), toon('#ff9aa2'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), worn('#ff9aa2'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       g.add(m(sphere, '#ff9aa2', [0.45, -0.2, 0.8], [0.13, 0.32, 0.08], [0.2, 0, 0.25]));
@@ -160,7 +177,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'bell': {
       g.position.set(0, 0.62, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.05, 8, 40), toon(tint));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.05, 8, 40), worn(tint));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       g.add(m(sphere, '#ffd166', [0, -0.1, 0.96], [0.13, 0.13, 0.13]));
@@ -183,7 +200,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
       g.position.set(0, 1.74, 0);
       g.rotation.set(-0.12, 0, 0.12);
       g.add(m(cyl, '#fff1c9', [0, 0, 0], [1.05, 0.04, 1.05]));
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon('#fff1c9'));
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), worn('#fff1c9'));
       dome.scale.set(0.58, 0.42, 0.58);
       g.add(dome);
       g.add(m(cyl, '#ff9ec7', [0, 0.07, 0], [0.6, 0.1, 0.6]));
@@ -193,7 +210,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     case 'acorn': {
       g.position.set(0.12, 1.78, 0);
       g.rotation.z = -0.25;
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon('#c9925f'));
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), worn('#c9925f'));
       cap.scale.set(0.5, 0.36, 0.5);
       g.add(cap);
       g.add(m(cyl, '#a8754a', [0, 0.02, 0], [0.52, 0.06, 0.52]));
@@ -202,7 +219,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'leafscarf': {
       g.position.set(0, 0.6, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), toon('#ffad7a'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), worn('#ffad7a'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       g.add(m(sphere, '#ffad7a', [-0.42, -0.2, 0.8], [0.13, 0.3, 0.08], [0.2, 0, -0.25]));
@@ -213,14 +230,14 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'earmuffs': {
       g.position.set(0, 1.0, 0);
-      const band = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 8, 32, Math.PI), toon('#b8a4f0'));
+      const band = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 8, 32, Math.PI), worn('#b8a4f0'));
       g.add(band);
       for (const s of [-1, 1]) g.add(m(sphere, '#ffffff', [1.0 * s, 0.05, 0], [0.22, 0.28, 0.24]));
       break;
     }
     case 'daisychain': {
       g.position.set(0, 0.62, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.035, 6, 40), toon('#95d5b2'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.035, 6, 40), worn('#95d5b2'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       for (let i = 0; i < 8; i++) {
@@ -253,7 +270,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'fairylights': {
       g.position.set(0, 0.62, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.02, 6, 40), toon('#6b5a7a'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.02, 6, 40), worn('#6b5a7a'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       const cols = ['#ff8fab', '#ffe066', '#9bf6ff', '#caffbf', '#cdb4db'];
@@ -269,7 +286,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     case 'cometcap': {
       g.position.set(0.1, 1.74, 0);
       g.rotation.set(-0.2, 0, -0.2);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon('#5e60ce'));
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), worn('#5e60ce'));
       cap.scale.set(0.6, 0.42, 0.6);
       g.add(cap);
       g.add(m(cyl, '#ffd166', [0, 0.02, 0], [0.62, 0.06, 0.62]));
@@ -280,7 +297,7 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
     }
     case 'stardust': {
       g.position.set(0, 0.6, 0);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), toon('#6a5acd'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), worn('#6a5acd'));
       ring.rotation.x = Math.PI / 2;
       g.add(ring);
       g.add(m(sphere, '#6a5acd', [0.45, -0.2, 0.8], [0.13, 0.32, 0.08], [0.2, 0, 0.25]));

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { decor, freshStart, SHOTS, trackErrors, validSpots } from './helpers';
+import { decor, freshStart, pets, ready, seedSave, SHOTS, trackErrors, validSpots } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -143,6 +143,57 @@ test.describe('landscape decorate', () => {
     await page.screenshot({ path: `${SHOTS}/r3-landscape-decorate-edge.png` });
     await page.tap('#decoRemove');
     expect((await decor(page)).map((d) => d.kind)).toEqual(['cottage']);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('landscape cards', () => {
+  test.use({ viewport: { width: 844, height: 390 } });
+  test('the pet panel, plot card and visitor shop stay clear of the clock and season badge', async ({ page }) => {
+    test.setTimeout(150_000);
+    const errors = trackErrors(page);
+    // Lantern Festival night: the widest badge, and Twinkle comes.
+    await freshStart(page, '?time=22:30&weather=clear&date=2026-11-13');
+    const s = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-pet-planet:v1')!));
+    s.decor = [{ id: 'p1', kind: 'plot', pos: [0.3, 0.3, 0.9], rot: 0 }];
+    s.garden = { seeds: { strawberry: 2 }, plots: { p1: { seed: 'strawberry', grown: 10, at: Date.now(), wetUntil: 0 } } };
+    s.savedAt = Date.now();
+    await seedSave(page, s);
+    await page.goto('?time=22:30&weather=clear&date=2026-11-13&visitor=1');
+    await ready(page);
+    const hud = async () => [(await page.locator('#clock').boundingBox())!, (await page.locator('#seasonBadge').boundingBox())!];
+    const clear = async (sel: string) => {
+      await expect(page.locator(sel)).toBeVisible();
+      await page.waitForTimeout(500); // pop-in
+      const card = (await page.locator(sel).boundingBox())!;
+      for (const h of await hud()) expect(overlaps(card, h), `${sel} under the clock/badge`).toBe(false);
+      expect(card.y + card.height).toBeLessThanOrEqual(390);
+      return card;
+    };
+    const tapAt = async (get: () => Promise<{ x: number; y: number }>, sel: string) => {
+      for (let i = 0; i < 10 && !(await page.locator(sel).isVisible()); i++) {
+        const p = await get();
+        await page.touchscreen.tap(p.x, p.y);
+        await page.waitForTimeout(400);
+        if (sel !== '#panel' && (await page.locator('#panel').isVisible())) await page.tap('#close');
+      }
+    };
+    // Plot card.
+    await page.evaluate(() => (window as any).__ppp.focus([0.3, 0.3, 0.9], 8));
+    await page.waitForTimeout(600);
+    await tapAt(async () => (await page.evaluate(() => (window as any).__ppp.garden())).plots[0].screen, '#plotCard');
+    await clear('#plotCard');
+    await page.screenshot({ path: `${SHOTS}/r4-landscape-plot.png` });
+    await page.tap('#plotClose');
+    // Visitor shop.
+    await expect.poll(async () => (await page.evaluate(() => (window as any).__ppp.visitor())).state, { timeout: 60_000 }).toBe('here');
+    await tapAt(async () => (await page.evaluate(() => (window as any).__ppp.visitor())).screen, '#shop');
+    await clear('#shop');
+    await page.screenshot({ path: `${SHOTS}/r4-landscape-shop.png` });
+    await page.tap('#shopClose');
+    // Pet panel.
+    await tapAt(async () => (await pets(page)).filter((p) => p.visible && p.screen.y > 60 && p.screen.y < 360 && p.screen.x < 500)[0]?.screen ?? { x: 0, y: 0 }, '#panel');
+    await clear('#panel');
     expect(errors).toEqual([]);
   });
 });

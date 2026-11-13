@@ -82,14 +82,19 @@ export function plantModel(p: PlotData): THREE.Group {
   const stage = stageOf(p);
   if (!p.seed || stage === 0) return g;
   const s = SEEDS[p.seed];
-  const spots: [number, number][] = [[-0.045, -0.03], [0.045, -0.03], [0, 0.04]];
+  const spots: [number, number][] = [[-0.06, -0.035], [0.06, -0.035], [0, 0.045]];
   for (const [x, z] of spots) {
     if (stage === 1) {
+      // Bright two-leaf seedlings on a short stem, big enough to spot from the default zoom.
+      const stem = new THREE.Mesh(cyl, toon('#6cc070'));
+      stem.position.set(x, 0.05, z);
+      stem.scale.set(0.004, 0.035, 0.004);
+      g.add(stem);
       for (const sx of [-1, 1]) {
-        const leaf = new THREE.Mesh(sphere, toon(s.leaf));
-        leaf.position.set(x + sx * 0.012, 0.04, z);
+        const leaf = new THREE.Mesh(sphere, toon('#7ed957'));
+        leaf.position.set(x + sx * 0.018, 0.07, z);
         leaf.rotation.z = sx * 0.5;
-        leaf.scale.set(0.02, 0.009, 0.013);
+        leaf.scale.set(0.026, 0.011, 0.017);
         g.add(leaf);
       }
       continue;

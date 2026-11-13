@@ -103,9 +103,11 @@ function model(kind: DecorKind): { g: THREE.Group; glowAt?: V3[]; top: number } 
       return { g, top: 0.1 };
     }
     case 'plot': {
-      g.add(p(box, '#c99a7a', [0, 0.012, 0], [0.2, 0.024, 0.15]));
-      for (const z of [-0.035, 0.035]) g.add(p(box, '#8e6a5a', [0, 0.026, z], [0.17, 0.006, 0.012]));
-      return { g, top: 0.12 };
+      // A light wooden frame so an empty bed stands out from the grass, with a little seed-packet stake.
+      g.add(p(box, '#f0d3a8', [0, 0.016, 0], [0.26, 0.032, 0.2]));
+      g.add(p(box, '#c99a7a', [0.1, 0.06, -0.085], [0.008, 0.09, 0.008]));
+      g.add(p(box, '#ff9ec7', [0.1, 0.1, -0.08], [0.04, 0.04, 0.006]));
+      return { g, top: 0.14 };
     }
     case 'well': {
       g.add(p(cyl, '#e6dff0', [0, 0.035, 0], [0.06, 0.07, 0.06]));
@@ -161,8 +163,8 @@ export function buildDecor(data: DecorData): Decor {
   const d: Decor = { data, group, hit, glow, ring, top };
   if (data.kind === 'plot') {
     d.soil = new THREE.Mesh(box, soilDry);
-    d.soil.position.y = 0.0245;
-    d.soil.scale.set(0.185, 0.002, 0.135);
+    d.soil.position.y = 0.0325;
+    d.soil.scale.set(0.22, 0.004, 0.16);
     d.plant = new THREE.Group();
     group.add(d.soil, d.plant);
   }

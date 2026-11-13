@@ -4,7 +4,7 @@ import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
 import { Sound } from './audio';
-import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isOwnedOnly, unlockedAt } from './accessories';
+import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isOwnedOnly, setWornGlow, unlockedAt } from './accessories';
 import { isVisitorNight, nightKey, parseVisitorOverride, Visitor, VISITOR, visitorSticker, WARES } from './visitor';
 import { SeasonFX } from './seasonfx';
 import { cardSize, deliver, drawPostcard, exportPostcard, FRAMES, postcardName, STICKERS, type Postcard, type Sticker } from './photobooth';
@@ -1234,6 +1234,13 @@ for (const d of plots()) {
   grow(p, Date.now());
   showPlot(d);
 }
+if (gardenSkipH) {
+  // Applied once: drop it from the address so a reload doesn't skip the same hours again.
+  params.delete('gardenSkip');
+  const q = params.toString();
+  history.replaceState(history.state, '', location.pathname + (q ? `?${q}` : '') + location.hash);
+  persist();
+}
 for (const id of Object.keys(garden.plots)) if (!decorList.some((d) => d.data.id === id)) delete garden.plots[id];
 persist();
 const seedCount = (k: SeedKind) => garden.seeds[k] ?? 0;
@@ -1870,7 +1877,9 @@ renderer.setAnimationLoop(() => {
     gardenTick();
     visitorTick();
   }
-  visitor?.update(dt, t, camera.position);
+  // Real elapsed time (not the per-frame clamped dt) so the swoop takes ~3 s even on a slow, busy machine.
+  visitor?.update(Math.min(1, raw), t, camera.position);
+  setWornGlow(dayNight.night * 0.7);
   visitFrame(now);
   seekFrame(now);
   for (const d of decorList)

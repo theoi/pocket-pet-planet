@@ -69,7 +69,7 @@ test('Twinkle lands on a visitor night, trades snacks for a rare outfit, and app
 });
 
 test('Twinkle leaves at dawn, writes a goodbye page, and does not come back the same night', async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
   const errors = trackErrors(page);
   // Real clock (no ?time): 23:00 on a visitor night (?visitor=1), then the clock jumps to dawn.
   await page.clock.setFixedTime(new Date(2026, 10, 3, 23, 0));
@@ -77,9 +77,12 @@ test('Twinkle leaves at dawn, writes a goodbye page, and does not come back the 
   await expect.poll(async () => (await vis(page)).state, { timeout: 45_000 }).toBe('here');
   expect((await vis(page)).night).toBe('2026-11-03');
   await page.clock.setFixedTime(new Date(2026, 10, 4, 6, 40));
-  await expect.poll(async () => (await vis(page)).state, { timeout: 45_000 }).toBe('none');
+  // First the decision (saved and written in the diary), then the fly-away animation finishing. Generous timeouts
+  // because both run on the game loop, which a busy machine slows down; nothing here depends on wall time.
+  await expect.poll(async () => (await savedGame(page)).visits['2026-11-03'].left, { timeout: 90_000 }).toBe(true);
   expect((await diary(page)).map((e) => e.text)).toContain('Twinkle waved goodbye and flew home at dawn');
-  expect((await savedGame(page)).visits['2026-11-03'].left).toBe(true);
+  expect(['leaving', 'none']).toContain((await vis(page)).state);
+  await expect.poll(async () => (await vis(page)).state, { timeout: 90_000 }).toBe('none');
   // Back to night: same night key, so Twinkle stays home.
   await page.clock.setFixedTime(new Date(2026, 10, 4, 4, 0));
   await page.reload();

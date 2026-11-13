@@ -60,6 +60,13 @@ test('plant, water, grow over (skipped) days, harvest treats', async ({ page }) 
   expect(g.plots[0].stage).toBe(2);
   expect(g.plots[0].progress).toBeGreaterThan(0.39);
   expect(g.plots[0].progress).toBeLessThan(0.45);
+  // The skip applies once: it's dropped from the address (other parameters stay), so a reload doesn't skip again.
+  expect(page.url()).not.toContain('gardenSkip');
+  expect(page.url()).toContain('date=2026-11-03');
+  const before = g.plots[0].progress;
+  await page.reload();
+  await ready(page);
+  expect((await garden(page)).plots[0].progress - before).toBeLessThan(0.01);
   // 20 more: ripe, with fruit showing.
   await page.goto('?time=12:00&weather=clear&date=2026-11-03&gardenSkip=20');
   await ready(page);

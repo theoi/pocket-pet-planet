@@ -270,8 +270,9 @@ body.decorating .title p { visibility: hidden; }
 /* Landscape phones: dock a compact panel on the right so the planet (shifted left in JS) stays visible. */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
   .panel {
-    left: auto; right: max(8px, env(safe-area-inset-right)); top: 44px; bottom: auto; transform: none;
-    width: min(300px, 42vw); max-height: calc(100dvh - 52px); overflow-y: auto; overscroll-behavior: contain;
+    /* Below the top-right clock and season badge column (about 12 + 24 + 4 + 22 px). */
+    left: auto; right: max(8px, env(safe-area-inset-right)); top: max(72px, calc(env(safe-area-inset-top) + 64px)); bottom: auto; transform: none;
+    width: min(300px, 42vw); max-height: calc(100dvh - 80px); overflow-y: auto; overscroll-behavior: contain;
     padding: 8px 12px 10px; border-radius: 20px; animation-name: pop-side;
   }
   .head { margin-bottom: 2px; gap: 8px; }
