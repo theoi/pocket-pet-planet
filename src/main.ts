@@ -3,17 +3,32 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
+import { Sound } from './audio';
 import { accessoryById, ACCESSORIES, unlockedAt } from './accessories';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
 import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
 import { colorOf, featureOf } from './eggs';
 import { FruitCatch } from './minigame';
+import { parseWeatherOverride, Weather } from './weather';
 import { buildWorld } from './world';
 
 const HOUR = 3600_000;
 const debugMode = new URLSearchParams(location.search).has('debug');
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+const sound = new Sound();
+const muteBtn = document.getElementById('muteBtn')!;
+const showMute = () => {
+  muteBtn.textContent = sound.muted ? '🔇' : '🔊';
+  muteBtn.setAttribute('aria-pressed', String(sound.muted));
+  muteBtn.setAttribute('aria-label', sound.muted ? 'Sound off' : 'Sound on');
+};
+showMute();
+muteBtn.addEventListener('click', () => {
+  sound.setMuted(!sound.muted);
+  showMute();
+});
 
 // --- scene ---------------------------------------------------------------
 const app = $('app');
@@ -60,11 +75,18 @@ const eggs = game.eggs.map((d) => new Egg(d));
 for (const e of eggs) scene.add(e.group);
 let selected: Pet | null = null;
 let resetting = false;
+const weather = new Weather(scene, camera, world, parseWeatherOverride(), game.flowers);
+if (loaded.offlineMs > 0) weather.dryOut(loaded.offlineMs);
+weather.onBloom = (pos, up) => {
+  fx.sparkles(pos, up, 6, 0.25);
+  sound.play('bloom');
+};
 
 const persist = () => {
   if (resetting) return;
   game.pets = pets.map((p) => p.data);
   game.eggs = eggs.map((e) => e.data);
+  game.flowers = weather.blooms.map((b) => Math.round(b * 1000) / 1000);
   save(game);
 };
 const addCare = (d: PetData, amount: number) => {
@@ -75,6 +97,7 @@ const addCare = (d: PetData, amount: number) => {
   if (now.length > before) {
     const a = now[now.length - 1];
     toast(`New outfit unlocked: ${a.emoji} ${a.name}!`);
+    sound.play('unlock');
     renderWardrobe();
   }
 };
@@ -123,6 +146,7 @@ function toggleWear(id: string) {
   else {
     d.wear[a.slot] = id;
     fx.sparkles(selected.headWorld(), selected.up, 10, 0.4);
+    sound.play('wear');
     selected.react('pet');
   }
   selected.build();
@@ -200,6 +224,7 @@ function select(pet: Pet | null) {
   renameForm.classList.add('hidden');
   $('wardrobe').classList.add('hidden');
   if (pet) {
+    sound.play('select');
     pet.setSelected(true);
     panel.classList.remove('hidden');
     tag.classList.remove('hidden');
@@ -218,6 +243,7 @@ function checkEvolve(pet: Pet) {
   fx.sparkles(pet.centerWorld(), pet.up, 18, 0.5);
   pet.evolve(() => {
     fx.sparkles(pet.centerWorld(), pet.up, 45, 1.1);
+    sound.play('evolve');
     floater(pet, `✨ ${formName(d)}! ✨`);
     refreshPanel();
   });
@@ -228,6 +254,7 @@ function feed(pet: Pet) {
   if (pet.evolving) return;
   if (d.food >= 90) {
     pet.react('full');
+    sound.play('full');
     floater(pet, 'Too full!');
     return;
   }
@@ -236,6 +263,7 @@ function feed(pet: Pet) {
   d.joy = Math.min(100, d.joy + 8);
   addCare(d, 1);
   persist();
+  sound.play('feed');
   fx.berry(
     () => pet.headWorld().addScaledVector(pet.up, -pet.size * 0.4),
     () => pet.up,
@@ -260,6 +288,7 @@ function treat(pet: Pet) {
   addCare(d, 1.5);
   persist();
   updateSnacks();
+  sound.play('treat');
   fx.berry(
     () => pet.headWorld().addScaledVector(pet.up, -pet.size * 0.4),
     () => pet.up,
@@ -288,9 +317,11 @@ function openMiniGame() {
   const pet = selected ?? [...pets].sort((a, b) => b.data.joy - a.data.joy)[0];
   const d = pet.data;
   select(null);
+  sound.setFocus(true);
   miniGame = new FruitCatch(
     { name: d.name, color: colorOf(d), feature: featureOf(d) },
     (score) => {
+      sound.play('gameEnd');
       game.snacks += score;
       d.joy = Math.min(100, d.joy + 15);
       wake(pet);
@@ -299,13 +330,17 @@ function openMiniGame() {
     },
     () => {
       miniGame = null;
+      sound.setFocus(false);
       clock.getDelta();
       pet.react('feed');
       fx.hearts(pet.headWorld(), pet.up, 5);
     },
   );
 }
-$('playBtn').addEventListener('click', openMiniGame);
+$('playBtn').addEventListener('click', () => {
+  openMiniGame();
+  if (miniGame) miniGame.onCatch = (combo) => sound.play('catch', combo);
+});
 
 const lastPetAt = new WeakMap<Pet, number>();
 function cuddle(pet: Pet) {
@@ -317,6 +352,7 @@ function cuddle(pet: Pet) {
   if (now - (lastPetAt.get(pet) ?? 0) > 3000) addCare(d, 0.25);
   lastPetAt.set(pet, now);
   pet.react('pet');
+  sound.purr();
   fx.hearts(pet.headWorld(), pet.up, 4);
   floater(pet, '♥');
   persist();
@@ -348,6 +384,7 @@ renameForm.addEventListener('submit', (e) => {
   if (selected && name) {
     selected.data.name = name;
     floater(selected, `Hi, I'm ${name}!`);
+    sound.play('rename');
     persist();
     refreshPanel();
   }
@@ -428,6 +465,7 @@ function layEgg(a: Pet, b: Pet) {
   fx.hearts(egg.group.position.clone().addScaledVector(mid, 0.25), mid, 8);
   const s = toScreen(egg.group.position.clone().addScaledVector(mid, 0.4));
   floatAt(s.x, s.y, '💞 An egg!');
+  sound.play('egg');
   persist();
 }
 
@@ -450,6 +488,7 @@ function hatch(egg: Egg) {
   fx.sparkles(pet.centerWorld(), pet.up, 30, 0.7);
   fx.hearts(pet.headWorld(), pet.up, 5);
   floater(pet, `🐣 Meet ${d.name}!`);
+  sound.play('hatch');
   persist();
 }
 
@@ -578,8 +617,11 @@ window.__ppp = {
   eggs: () => eggs.map((e) => ({ ...e.data, screen: toScreen(e.group.position) })),
   unlocked: () => unlockedAt(game.totalCare).map((a) => a.id),
   minigame: () => miniGame?.state() ?? null,
+  audio: () => ({ state: sound.state, muted: sound.muted }),
+  weather: () => weather.view(),
+  __sound: sound,
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
-  ...(debugMode ? { fastForward, evolve: debugEvolve } : {}),
+  ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
 };
 
 // --- loop ----------------------------------------------------------------
@@ -621,6 +663,8 @@ renderer.setAnimationLoop(() => {
   adaptQuality(raw);
   const dt = Math.min(0.1, raw);
   const t = clock.elapsedTime;
+  weather.tick(dt, t, dayNight.night);
+  dayNight.cloudy = Math.max(weather.rain, weather.snow * 0.6);
   dayNight.tick(dt, t);
   const now = performance.now();
   for (const p of pets) {
@@ -643,12 +687,14 @@ renderer.setAnimationLoop(() => {
   twinkleTimer -= dt;
   if (twinkleTimer <= 0) {
     twinkleTimer = 0.25;
+    sound.setNight(dayNight.night);
+    sound.setRain(weather.rain);
     for (const p of pets) {
       if (p.data.stage >= 2 && Math.random() < 0.4) fx.twinkle(p.headWorld(), p.up);
       if (p.sleeping && Math.random() < 0.18) fx.zzz(p.headWorld(), p.up);
     }
     const hh = Math.floor(dayNight.hour), mm = Math.floor((dayNight.hour % 1) * 60);
-    clockEl.textContent = `${dayNight.night > 0.5 ? '🌙' : dayNight.night > 0.05 ? '🌇' : '☀️'} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    clockEl.textContent = `${weather.emoji ? weather.emoji + ' ' : ''}${dayNight.night > 0.5 ? '🌙' : dayNight.night > 0.05 ? '🌇' : '☀️'} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   }
   fx.update(dt);
   world.update(dt);

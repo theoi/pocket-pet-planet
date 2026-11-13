@@ -53,6 +53,7 @@ export class FruitCatch {
   private pops: Pop[] = [];
   private phase: MiniState['phase'] = 'intro';
   private reward = 0;
+  onCatch: ((combo: number) => void) | null = null;
   private timeLeft: number;
   private score = 0;
   private caught = 0;
@@ -204,6 +205,7 @@ export class FruitCatch {
         this.score += pts;
         this.caught++;
         this.happyT = 0.35;
+        this.onCatch?.(this.combo);
         this.pops.push({ x: f.x, y: cy - 50, text: bonus ? `+${pts} combo!` : `+${pts}`, t: 0.9 });
       } else if (f.y > this.h + 30) {
         this.fruits.splice(i, 1);

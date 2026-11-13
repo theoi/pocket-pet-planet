@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   projects: [
-    { name: 'desktop', testMatch: /(desktop|r1-[a-z]+)\.spec\.ts/, use: { viewport: { width: 1280, height: 800 } } },
+    { name: 'desktop', testMatch: /(desktop|r[0-9]-[a-z]+)\.spec\.ts/, use: { viewport: { width: 1280, height: 800 } } },
     { name: 'mobile', testMatch: /mobile(-[a-z]+)?\.spec\.ts/, use: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } },
   ],
 });

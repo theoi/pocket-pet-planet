@@ -77,15 +77,37 @@ function rock(rng: () => number): THREE.Group {
   return g;
 }
 
+export interface Flower {
+  obj: THREE.Group;
+  stem: THREE.Object3D;
+  head: THREE.Group;
+  petals: THREE.Object3D[];
+  normal: THREE.Vector3;
+  baseScale: number;
+}
+
 function flower(rng: () => number): THREE.Group {
   const g = new THREE.Group();
   const petal = ['#ffafcc', '#cdb4db', '#ffd6a5', '#a0c4ff', '#fdffb6', '#ffffff'][Math.floor(rng() * 6)];
-  g.add(part(cyl, '#88c9a1', [0, 0.04, 0], [0.006, 0.08, 0.006]));
+  const stem = new THREE.Group();
+  stem.add(part(cyl, '#88c9a1', [0, 0.04, 0], [0.006, 0.08, 0.006]));
+  stem.add(part(sphere, '#95d5b2', [0.012, 0.035, 0], [0.012, 0.004, 0.007]));
+  g.add(stem);
+  const head = new THREE.Group();
+  head.position.y = 0.085;
+  const petals: THREE.Object3D[] = [];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    g.add(part(sphere, petal, [Math.cos(a) * 0.022, 0.085, Math.sin(a) * 0.022], [0.018, 0.01, 0.018]));
+    // Each petal pivots at the flower's centre so it can fold up into a bud and open into a bloom.
+    const pivot = new THREE.Group();
+    pivot.rotation.y = -a;
+    pivot.add(part(sphere, petal, [0.022, 0, 0], [0.018, 0.01, 0.018]));
+    head.add(pivot);
+    petals.push(pivot);
   }
-  g.add(part(sphere, '#ffe066', [0, 0.09, 0], [0.014, 0.012, 0.014]));
+  head.add(part(sphere, '#ffe066', [0, 0.005, 0], [0.014, 0.012, 0.014]));
+  g.add(head);
+  g.userData.flower = { stem, head, petals };
   return g;
 }
 
@@ -109,12 +131,17 @@ function pond(): THREE.Mesh {
   return m;
 }
 
+const cloudMat = toon('#ffffff').clone();
+
 function cloud(rng: () => number): THREE.Group {
   const g = new THREE.Group();
   const n = 3 + Math.floor(rng() * 2);
   for (let i = 0; i < n; i++) {
     const s = 0.13 + rng() * 0.08;
-    g.add(part(sphere, '#ffffff', [(i - n / 2) * 0.16, (rng() - 0.5) * 0.06, (rng() - 0.5) * 0.08], [s, s * 0.8, s]));
+    const puff = new THREE.Mesh(sphere, cloudMat);
+    puff.position.set((i - n / 2) * 0.16, (rng() - 0.5) * 0.06, (rng() - 0.5) * 0.08);
+    puff.scale.set(s, s * 0.8, s);
+    g.add(puff);
   }
   return g;
 }
@@ -126,9 +153,21 @@ function randomUnit(rng: () => number): THREE.Vector3 {
   return new THREE.Vector3(r * Math.cos(a), z, r * Math.sin(a));
 }
 
+export interface Cloud {
+  pivot: THREE.Object3D;
+  cloud: THREE.Group;
+  speed: number;
+  /** Only present during rain; extra clouds fade in and out. */
+  extra?: boolean;
+}
+
 export interface World {
   planet: THREE.Mesh;
   halo: THREE.Sprite;
+  flowers: Flower[];
+  clouds: Cloud[];
+  cloudMat: THREE.MeshToonMaterial;
+  makeCloud(): Cloud;
   update(dt: number): void;
 }
 
@@ -182,18 +221,21 @@ export function buildWorld(scene: THREE.Scene): World {
     [() => mushroom(), 8, 0.14],
     [() => flower(rng), 40, 0.07],
   ];
+  const flowers: Flower[] = [];
   for (const [make, count, gap] of props) {
     for (let i = 0; i < count; i++) {
       const obj = make();
       const s = 0.85 + rng() * 0.35;
       obj.scale.setScalar(s);
-      placeOnSphere(obj, spot(gap), R - 0.01, rng() * Math.PI * 2);
+      const n = spot(gap);
+      placeOnSphere(obj, n, R - 0.01, rng() * Math.PI * 2);
       scene.add(obj);
+      if (obj.userData.flower) flowers.push({ obj: obj as THREE.Group, ...obj.userData.flower, normal: n.clone(), baseScale: s });
     }
   }
 
-  const clouds: { pivot: THREE.Object3D; speed: number }[] = [];
-  for (let i = 0; i < 6; i++) {
+  const clouds: Cloud[] = [];
+  const makeCloud = (): Cloud => {
     const pivot = new THREE.Object3D();
     pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), randomUnit(rng));
     const c = cloud(rng);
@@ -202,12 +244,17 @@ export function buildWorld(scene: THREE.Scene): World {
     pivot.add(c);
     pivot.rotation.y = rng() * Math.PI * 2;
     scene.add(pivot);
-    clouds.push({ pivot, speed: 0.04 + rng() * 0.05 });
-  }
+    return { pivot, cloud: c, speed: 0.04 + rng() * 0.05 };
+  };
+  for (let i = 0; i < 6; i++) clouds.push(makeCloud());
 
   return {
     planet,
     halo,
+    flowers,
+    clouds,
+    cloudMat,
+    makeCloud,
     update(dt) {
       for (const c of clouds) c.pivot.rotateY(c.speed * dt);
     },

@@ -17,6 +17,10 @@ html, body {
   user-select: none;
 }
 #app { position: fixed; inset: 0; }
+.weather-tint {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1s linear;
+  background: linear-gradient(180deg, rgba(110, 105, 150, 0.75), rgba(150, 145, 185, 0.35));
+}
 #app canvas { display: block; touch-action: none; cursor: grab; }
 #app canvas:active { cursor: grabbing; }
 .hidden { display: none !important; }

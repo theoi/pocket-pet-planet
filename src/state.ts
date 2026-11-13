@@ -41,6 +41,8 @@ export interface Game {
   /** Lifetime care given across all pets; unlocks accessories. */
   totalCare: number;
   lastEggAt: number;
+  /** Per-flower bloom (0 bud … 1 open), indexed like the planet's flowers. */
+  flowers?: number[];
 }
 
 interface SaveV1 {
@@ -174,6 +176,7 @@ export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number })
       snacks: num(parsed.snacks, 0),
       totalCare: num(parsed.totalCare, 0),
       lastEggAt: num(parsed.lastEggAt, 0),
+      flowers: Array.isArray(parsed.flowers) ? parsed.flowers.map((x) => num(x, 0.35)) : undefined,
     };
   }
   return null;

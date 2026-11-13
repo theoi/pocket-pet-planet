@@ -53,6 +53,8 @@ interface Firefly { sprite: THREE.Sprite; base: THREE.Vector3; t1: THREE.Vector3
 export class DayNight {
   night = 0;
   hour = 12;
+  /** Set by the weather: overcast skies dim the light and hide stars and fireflies. */
+  cloudy = 0;
   private fireflies: Firefly[] = [];
   private stars: THREE.Points;
   private lanternGlows: THREE.Sprite[] = [];
@@ -137,12 +139,12 @@ export class DayNight {
         document.body.classList.toggle('is-night', this.night > 0.5);
       }
       const n = this.night;
-      this.hemi.intensity = THREE.MathUtils.lerp(1.6, 0.75, n);
+      this.hemi.intensity = THREE.MathUtils.lerp(1.6, 0.75, n) * (1 - this.cloudy * 0.2);
       this.hemi.color.set('#fff6fb').lerp(new THREE.Color('#aab2ff'), n);
       this.hemi.groundColor.set('#c9b3e6').lerp(new THREE.Color('#5b4f9a'), n);
-      this.sun.intensity = THREE.MathUtils.lerp(1.5, 0.55, n);
+      this.sun.intensity = THREE.MathUtils.lerp(1.5, 0.55, n) * (1 - this.cloudy * 0.35);
       this.sun.color.set('#ffffff').lerp(new THREE.Color('#c9c4ff'), n);
-      (this.stars.material as THREE.PointsMaterial).opacity = n;
+      (this.stars.material as THREE.PointsMaterial).opacity = n * (1 - this.cloudy * 0.8);
       this.halo.material.color.set('#ffffff').lerp(new THREE.Color('#9d8cff'), n);
       this.halo.material.opacity = 1 - n * 0.35;
       this.stars.visible = n > 0.01;
@@ -164,7 +166,7 @@ export class DayNight {
         .addScaledVector(f.t2, Math.cos(a * 0.7) * off)
         .normalize()
         .multiplyScalar(R + 0.18 + Math.sin(a * 1.3) * 0.08);
-      f.sprite.material.opacity = n * (0.55 + 0.45 * Math.sin(a * 3.1));
+      f.sprite.material.opacity = n * (1 - this.cloudy) * (0.55 + 0.45 * Math.sin(a * 3.1));
     }
   }
 }

@@ -1,0 +1,43 @@
+import { chromium } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
+const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=user-gesture-required'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+await page.goto('http://127.0.0.1:4173/pocket-pet-planet/?debug=1&time=12:00');
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => window.__ppp?.ready);
+await page.waitForTimeout(800);
+const pets = await page.evaluate(() => window.__ppp.pets());
+const p = pets.find((x) => x.visible && x.screen.y < 470);
+await page.mouse.click(p.screen.x, p.screen.y);
+await page.evaluate(() => {
+  const s = window.__ppp.__sound;
+  const dest = s.ctx.createMediaStreamDestination();
+  s.tap(dest);
+  const rec = new MediaRecorder(dest.stream, { mimeType: 'audio/webm;codecs=opus' });
+  const chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  window.__rec = { rec, chunks };
+  rec.start();
+});
+await page.waitForTimeout(4000);
+await page.click('#petBtn');
+await page.waitForTimeout(2200);
+await page.click('#feedBtn');
+await page.waitForTimeout(2000);
+await page.click('#dbgEvolve');
+await page.waitForTimeout(4500);
+const b64 = await page.evaluate(() => new Promise((res) => {
+  const { rec, chunks } = window.__rec;
+  rec.onstop = async () => {
+    const buf = await new Blob(chunks, { type: 'audio/webm' }).arrayBuffer();
+    let s = '';
+    const u = new Uint8Array(buf);
+    for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+    res(btoa(s));
+  };
+  rec.stop();
+}));
+writeFileSync(process.argv[2], Buffer.from(b64, 'base64'));
+console.log('bytes', Buffer.from(b64, 'base64').length);
+await browser.close();
