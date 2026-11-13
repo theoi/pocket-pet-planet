@@ -13,7 +13,7 @@ export interface PetView {
   screen: { x: number; y: number };
 }
 
-export const SHOTS = process.env.PPP_SHOTS ?? 'test-results/shots';
+export const SHOTS = process.env.PPP_SHOTS ?? 'shots/tests';
 
 export function trackErrors(page: Page): string[] {
   const errors: string[] = [];
