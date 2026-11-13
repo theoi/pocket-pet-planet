@@ -127,10 +127,14 @@ test('enough care evolves a creature (debug fast-forward)', async ({ page }) => 
 
   // Overfeeding is refused and gives no care.
   const care = (await pets(page)).find((p) => p.id === pet.id)!.care;
-  await page.click('#feedBtn');
-  await page.click('#feedBtn');
+  // Feed until full; once full, further feeding gives no care.
+  for (let i = 0; i < 4; i++) await page.click('#feedBtn');
   await expect(page.locator('.floater', { hasText: 'Too full!' }).first()).toBeVisible();
-  expect((await pets(page)).find((p) => p.id === pet.id)!.care).toBeLessThanOrEqual(care + 1);
+  const full = (await pets(page)).find((p) => p.id === pet.id)!;
+  expect(full.food).toBeGreaterThanOrEqual(90);
+  for (let i = 0; i < 3; i++) await page.click('#feedBtn');
+  expect((await pets(page)).find((p) => p.id === pet.id)!.care).toBe(full.care);
+  expect(full.care).toBeLessThanOrEqual(care + 4);
 
   await page.click('#dbgEvolve');
   await expect.poll(async () => (await pets(page)).find((p) => p.id === pet.id)!.stage).toBe(2);
