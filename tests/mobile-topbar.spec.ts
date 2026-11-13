@@ -53,6 +53,17 @@ for (const vp of [
       await freshStart(page, '?time=12:34&weather=rain&date=2026-11-13');
       await expect(page.locator('#clock')).toContainText('12:3');
       await expect(page.locator('#seasonBadge')).toHaveText('🏮 Lantern Festival');
+      // The long festival greeting wraps inside the screen instead of running off the edge.
+      const toast = page.locator('#toast');
+      await expect(toast).toContainText('Lantern Festival is on!');
+      await expect(toast).toContainText('Lantern hat');
+      await page.waitForTimeout(500); // past the pop-in scale
+      const tb = (await toast.boundingBox())!;
+      expect(tb.x).toBeGreaterThanOrEqual(8);
+      expect(tb.x + tb.width).toBeLessThanOrEqual(vp.width - 8);
+      expect(await toast.evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+      if (vp.width <= 390) expect(tb.height).toBeGreaterThan(40); // wrapped onto more than one line
+      if (vp.width === 360) await page.screenshot({ path: `${SHOTS}/r3-toast-360.png` });
       await expectHudClear(page);
       // Night colours and the mute toggle change nothing about the layout.
       await page.tap('#muteBtn');
