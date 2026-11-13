@@ -20,7 +20,8 @@ async function regionStats(page: Page, x: number, y: number, w: number, h: numbe
     let white = 0, sat = 0, greenish = 0;
     for (let i = 0; i < d.length; i += 4) {
       const [r, g, bl] = [d[i], d[i + 1], d[i + 2]];
-      if (r > 235 && g > 235 && bl > 235) white++;
+      // Snow under an overcast sky is a soft off-white: bright and nearly colourless.
+      if (Math.min(r, g, bl) > 210 && Math.max(r, g, bl) - Math.min(r, g, bl) < 18) white++;
       sat += Math.max(r, g, bl) - Math.min(r, g, bl);
       // The pastel sky is all lilac/pink/peach; green-dominant pixels there can only come from the rainbow.
       if (g > r + 4 && g >= bl - 4) greenish++;

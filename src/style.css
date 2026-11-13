@@ -151,7 +151,7 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
 .pill.play:active { transform: translateY(1px); }
 body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
 @media (max-width: 560px) {
-  .title { top: max(48px, calc(env(safe-area-inset-top) + 40px)); }
+  .title { top: max(74px, calc(env(safe-area-inset-top) + 66px)); }
 }
 .actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .actions .btn { padding: 8px 2px; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; }
@@ -204,6 +204,53 @@ body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
 @media (max-width: 560px) { .pill.play .lbl { display: none; } }
 
+.pill.play[aria-pressed='true'] { background: #ffe3f0; box-shadow: 0 0 0 2px var(--pink); }
+.deco-tray {
+  position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 4;
+  width: min(520px, calc(100vw - 20px)); background: var(--card); border-radius: 22px; padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(130, 80, 150, 0.28); display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+}
+.deco-hint { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--soft); }
+.deco-hint.bad { color: #e3557f; }
+.deco-items { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.deco-items .chip { flex: 0 0 62px; }
+.deco-sel { grid-column: 1 / -1; display: flex; gap: 8px; }
+.deco-done { align-self: stretch; }
+body.decorating .title p { visibility: hidden; }
+
+.booth {
+  position: fixed; inset: 0; z-index: 11; display: flex; flex-direction: column; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #e9defa, #fbe3ef); touch-action: none;
+}
+.booth-head { display: flex; align-items: center; justify-content: center; position: relative; min-height: 34px; font-size: 16px; }
+.booth-head .close { top: 0; right: 0; }
+.booth-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.booth-stage { position: relative; box-shadow: 0 10px 30px rgba(130, 80, 150, 0.3); border-radius: 6px; overflow: hidden; }
+.booth-stage canvas { display: block; width: 100%; height: 100%; }
+.booth-stickers { position: absolute; inset: 0; }
+.st {
+  position: absolute; transform: translate(-50%, -50%); line-height: 1; cursor: grab; touch-action: none; user-select: none;
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 2px 2px rgba(90, 50, 110, 0.25));
+}
+.st.sel { outline: 2px dashed var(--pink); outline-offset: 4px; border-radius: 10px; }
+.booth-tools { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.booth-row { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; padding: 2px; scrollbar-width: thin; }
+.booth-row .chip { flex: 0 0 auto; min-width: 46px; font-size: 11px; padding: 6px 8px; }
+.booth-row .chip.emoji { font-size: 22px; padding: 4px 6px; }
+.booth-sel .btn { min-width: 44px; }
+.booth-save { flex: 0 0 auto; width: min(320px, 100%); }
+.booth-result {
+  position: absolute; inset: 0; background: rgba(80, 60, 110, 0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px;
+}
+.booth-result img { max-width: min(92vw, 640px); max-height: 62dvh; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); -webkit-touch-callout: default; user-select: auto; }
+.booth-result p { margin: 0; color: #fff; font-weight: 800; text-align: center; max-width: 420px; text-shadow: 0 1px 4px rgba(60, 30, 80, 0.5); }
+@media (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  .booth { flex-direction: row; flex-wrap: wrap; }
+  .booth-head { width: 100%; min-height: 26px; }
+  .booth-wrap { height: calc(100dvh - 60px); }
+  .booth-tools { width: 210px; justify-content: center; }
+  .booth-row { flex-wrap: wrap; justify-content: center; }
+}
 /* Landscape phones: dock a compact panel on the right so the planet (shifted left in JS) stays visible. */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
   .panel {

@@ -8,7 +8,8 @@ const BASE = 0.21;
 const STAGE_SIZE = [1, 1.25, 1.5];
 const WALK_SPEED = 0.13; // radians per second on the unit sphere
 
-const sphere = new THREE.SphereGeometry(1, 32, 24);
+// Pets are small on screen; 24x16 still reads perfectly round under toon shading and halves the triangle count.
+const sphere = new THREE.SphereGeometry(1, 24, 16);
 const smallSphere = new THREE.SphereGeometry(1, 16, 12);
 const cone = new THREE.ConeGeometry(1, 1, 20);
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 10);

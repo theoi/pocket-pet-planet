@@ -55,6 +55,23 @@ export async function seedSave(page: Page, data: unknown): Promise<void> {
 
 export const savedGame = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('pocket-pet-planet:v1')!));
 
+/** Screen points on the planet where a decoration may go, nearest the middle first. */
+export async function validSpots(page: Page, avoid: { x: number; y: number }[] = [], minGap = 70): Promise<{ x: number; y: number }[]> {
+  const vp = page.viewportSize()!;
+  const out: { x: number; y: number }[] = [];
+  const cx = vp.width / 2, cy = vp.height / 2;
+  for (let y = cy - 160; y <= cy + 160; y += 40)
+    for (let x = cx - 200; x <= cx + 200; x += 40) {
+      if (y < 80 || y > vp.height - 170) continue;
+      const r = await page.evaluate(([x, y]) => (window as any).__ppp.probe(x, y), [x, y]);
+      if (r.hit && !r.problem) out.push({ x, y });
+    }
+  const far = (p: { x: number; y: number }, list: { x: number; y: number }[]) => list.every((q) => Math.hypot(p.x - q.x, p.y - q.y) >= minGap);
+  return out.filter((p) => far(p, avoid)).sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+}
+
+export const decor = (page: Page) => page.evaluate(() => (window as any).__ppp.decor()) as Promise<any[]>;
+
 export const pets = (page: Page) => page.evaluate(() => (window as any).__ppp.pets()) as Promise<PetView[]>;
 export const cameraPos = (page: Page) => page.evaluate(() => (window as any).__ppp.camera()) as Promise<number[]>;
 export const selectedId = (page: Page) => page.evaluate(() => (window as any).__ppp.selected()) as Promise<string | null>;

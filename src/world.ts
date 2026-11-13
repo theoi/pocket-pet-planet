@@ -47,7 +47,7 @@ function planetMesh(season: Season): THREE.Mesh {
   return mesh;
 }
 
-const sphere = new THREE.SphereGeometry(1, 20, 16);
+const sphere = new THREE.SphereGeometry(1, 18, 12);
 const lowSphere = new THREE.SphereGeometry(1, 12, 8);
 const cone = new THREE.ConeGeometry(1, 1, 16);
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
@@ -395,10 +395,12 @@ export function buildWorld(scene: THREE.Scene, season: Season = 'spring'): World
   // Flowers: 40 animated blooms drawn with 4 instanced meshes instead of 320 separate ones.
   const N = flowers.length;
   const stemMesh = new THREE.InstancedMesh(cyl, toon('#88c9a1'), N);
-  const leafMesh = new THREE.InstancedMesh(sphere, toon('#95d5b2'), N);
-  const centerMesh = new THREE.InstancedMesh(sphere, toon('#ffe066'), N);
+  // Petals are a few pixels wide: a 10x6 sphere is plenty and saves ~150k triangles over the full-res one.
+  const tiny = new THREE.SphereGeometry(1, 10, 6);
+  const leafMesh = new THREE.InstancedMesh(tiny, toon('#95d5b2'), N);
+  const centerMesh = new THREE.InstancedMesh(tiny, toon('#ffe066'), N);
   const petalMat = toon('#ffffff').clone();
-  const petalMesh = new THREE.InstancedMesh(sphere, petalMat, N * 5);
+  const petalMesh = new THREE.InstancedMesh(tiny, petalMat, N * 5);
   const tmpC = new THREE.Color();
   flowers.forEach((f, i) => {
     f.petals.forEach((p, j) => petalMesh.setColorAt(i * 5 + j, tmpC.set(p.children[0].userData.petalColor as string)));

@@ -6,6 +6,8 @@ import { Pet } from './pet';
 import { Sound } from './audio';
 import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isSeasonal, unlockedAt } from './accessories';
 import { SeasonFX } from './seasonfx';
+import { cardSize, deliver, drawPostcard, exportPostcard, FRAMES, postcardName, STICKERS, type Postcard, type Sticker } from './photobooth';
+import { buildDecor, DECOR_CAP, DECOR_KINDS, isDecorKind, place, setRing, spotProblem, type Decor, type DecorKind } from './decorate';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
 import { SAVE_KEY, clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
@@ -13,7 +15,7 @@ import { colorOf, featureOf } from './eggs';
 import { FruitCatch } from './minigame';
 import { DEX, dexEntry, entriesFor, formatWhen, regionName, sticker } from './dex';
 import { parseWeatherOverride, Weather } from './weather';
-import { buildWorld } from './world';
+import { buildWorld, R } from './world';
 import { FESTIVALS, festivalOf, fmtRange, parseDateOverride, SEASONS, seasonOf } from './seasons';
 
 const HOUR = 3600_000;
@@ -72,7 +74,10 @@ const seasonFx = new SeasonFX(scene, world, season, festival);
 const timeOverride = parseTimeOverride();
 const dayNight = new DayNight(scene, hemi, sun, timeOverride, world.halo);
 const awakeUntil = new WeakMap<Pet, number>();
-const wake = (pet: Pet) => awakeUntil.set(pet, performance.now() + 45_000);
+const wake = (pet: Pet) => {
+  awakeUntil.set(pet, performance.now() + 45_000);
+  if (visits.get(pet)?.arrived) endVisit(pet);
+};
 
 // --- state ---------------------------------------------------------------
 const loaded = load();
@@ -91,11 +96,15 @@ weather.onBloom = (pos, up) => {
 };
 
 const tabClaim = performance.timeOrigin + Math.random();
+const decorList: Decor[] = [];
+let decorBuilt = false;
 const persist = () => {
   if (resetting) return;
   game.pets = pets.map((p) => p.data);
   game.eggs = eggs.map((e) => e.data);
   game.flowers = weather.blooms.map((b) => Math.round(b * 1000) / 1000);
+  // Saves made before the decorations are built keep the saved list untouched.
+  if (decorBuilt) game.decor = decorList.map((d) => d.data);
   save(game, tabClaim);
 };
 const addCare = (d: PetData, amount: number) => {
@@ -111,7 +120,26 @@ const addCare = (d: PetData, amount: number) => {
   }
 };
 
+const toastQueue: string[] = [];
+let toastBusyUntil = 0;
+/** Toasts queue up, so a festival greeting never hides a "new sticker" message and vice versa. */
 function toast(text: string) {
+  const now = performance.now();
+  if (now < toastBusyUntil) {
+    if (!toastQueue.includes(text)) toastQueue.push(text);
+    return;
+  }
+  toastBusyUntil = now + 2600;
+  setTimeout(() => {
+    const next = toastQueue.shift();
+    if (next) {
+      toastBusyUntil = 0;
+      toast(next);
+    }
+  }, 2650);
+  showToast(text);
+}
+function showToast(text: string) {
   const el = document.getElementById('toast')!;
   el.textContent = text;
   el.classList.remove('hidden');
@@ -523,7 +551,7 @@ if (loaded.offlineMs > 10 * 60_000) {
 // --- babies --------------------------------------------------------------
 let courtship: { a: Pet; b: Pet; started: number } | null = null;
 const canBreed = (p: Pet) =>
-  !p.sleeping && !p.evolving && p.data.joy >= BREED_JOY && p.data.food >= BREED_FOOD;
+  !p.sleeping && !p.evolving && !visits.has(p) && p.data.joy >= BREED_JOY && p.data.food >= BREED_FOOD;
 const population = () => pets.length + eggs.length;
 
 function endCourtship() {
@@ -631,10 +659,25 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (e.isPrimary) down = { x: e.clientX, y: e.clientY };
 });
 renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!down || !e.isPrimary) return;
+  if (!e.isPrimary) return;
+  if (endDrag()) {
+    down = null;
+    return;
+  }
+  if (!down) return;
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
   down = null;
   if (moved > 8) return;
+  if (decorating) {
+    if (pickKind) {
+      const n = surfacePoint(e.clientX, e.clientY);
+      if (n) placeDecor(pickKind, n);
+    } else if (!decorAt(e.clientX, e.clientY)) {
+      selectDecor(null);
+      hint(DEFAULT_HINT);
+    }
+    return;
+  }
   ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit)], false);
@@ -659,6 +702,405 @@ function cuddleOnTapAgain(pet: Pet) {
   lastTap = { pet, at: now };
 }
 
+
+// --- decorate ------------------------------------------------------------
+decorList.push(
+  ...(game.decor ?? [])
+    .filter((d) => isDecorKind(d.kind))
+    .map((d) => buildDecor({ id: d.id, kind: d.kind as DecorKind, pos: d.pos, rot: typeof d.rot === 'number' ? d.rot : 0 })),
+);
+for (const d of decorList) scene.add(d.group);
+decorBuilt = true;
+let decorating = false;
+let pickKind: DecorKind | null = null;
+let selDecor: Decor | null = null;
+let dragging: { d: Decor; start: [number, number, number]; moved: boolean; ok: boolean; id: number } | null = null;
+const decoHint = $('decoHint');
+const DEFAULT_HINT = 'Pick something, then tap the planet to place it. Drag a decoration to move it.';
+function hint(text: string, bad = false) {
+  decoHint.textContent = text;
+  decoHint.classList.toggle('bad', bad);
+}
+const PROBLEM_TEXT = { pond: "Splash! You can't build on the pond 💧", crowded: 'A little too close to something else' };
+
+function renderTray() {
+  $('decoItems').replaceChildren(
+    ...DECOR_KINDS.map((k) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (pickKind === k.kind ? ' on' : '');
+      b.dataset.kind = k.kind;
+      b.innerHTML = `<span class="e">${k.emoji}</span><span>${k.name}</span>`;
+      b.addEventListener('click', () => {
+        pickKind = pickKind === k.kind ? null : k.kind;
+        selectDecor(null);
+        hint(pickKind ? `Tap the planet to place a ${k.name.toLowerCase()} (${decorList.length}/${DECOR_CAP})` : DEFAULT_HINT);
+        renderTray();
+      });
+      return b;
+    }),
+  );
+}
+
+function selectDecor(d: Decor | null) {
+  if (selDecor) setRing(selDecor, false);
+  selDecor = d;
+  if (d) setRing(d, true);
+  $('decoSel').classList.toggle('hidden', !d);
+}
+
+function setDecorating(on: boolean) {
+  decorating = on;
+  document.body.classList.toggle('decorating', on);
+  $('decoBtn').setAttribute('aria-pressed', String(on));
+  $('decoTray').classList.toggle('hidden', !on);
+  if (on) {
+    select(null);
+    pickKind = null;
+    hint(DEFAULT_HINT);
+    renderTray();
+  } else {
+    selectDecor(null);
+    pickKind = null;
+  }
+}
+$('decoBtn').addEventListener('click', () => setDecorating(!decorating));
+$('decoDone').addEventListener('click', () => setDecorating(false));
+$('decoRotate').addEventListener('click', () => {
+  if (!selDecor) return;
+  selDecor.data.rot = (selDecor.data.rot + Math.PI / 4) % (Math.PI * 2);
+  place(selDecor);
+  persist();
+});
+$('decoRemove').addEventListener('click', () => {
+  if (!selDecor) return;
+  const d = selDecor;
+  selectDecor(null);
+  decorList.splice(decorList.indexOf(d), 1);
+  scene.remove(d.group);
+  for (const [p, v] of visits) if (v.decor === d) endVisit(p);
+  fx.sparkles(d.group.position.clone(), d.group.position.clone().normalize(), 10, 0.3);
+  sound.play('full');
+  hint(DEFAULT_HINT);
+  persist();
+});
+
+function surfacePoint(x: number, y: number): THREE.Vector3 | null {
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(world.planet, false)[0];
+  return hit ? hit.point.clone().normalize() : null;
+}
+function decorAt(x: number, y: number): Decor | null {
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects([world.planet, ...decorList.map((d) => d.hit)], false);
+  return (hits[0]?.object.userData.decor as Decor | undefined) ?? null;
+}
+
+function placeDecor(kind: DecorKind, n: THREE.Vector3) {
+  if (decorList.length >= DECOR_CAP) return hint(`The planet is full of decorations (${DECOR_CAP}). Remove one first.`, true);
+  const problem = spotProblem(n, world.ponds, decorList);
+  if (problem) {
+    const s = toScreen(n.clone().multiplyScalar(R));
+    floatAt(s.x, s.y, problem === 'pond' ? '💧 Not on the pond!' : '🙈 Too close');
+    sound.play('full');
+    return hint(PROBLEM_TEXT[problem], true);
+  }
+  // Face the camera so a freshly placed cottage shows its door.
+  const toCam = camera.position.clone().addScaledVector(n, -camera.position.dot(n));
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n));
+  const rot = Math.atan2(new THREE.Vector3().crossVectors(fwd, toCam).dot(n), fwd.dot(toCam));
+  const d = buildDecor({ id: Math.floor(Math.random() * 1e9).toString(36), kind, pos: [n.x, n.y, n.z], rot });
+  decorList.push(d);
+  scene.add(d.group);
+  fx.sparkles(n.clone().multiplyScalar(R + 0.05), n, 12, 0.35);
+  sound.play('wear');
+  hint(`Placed! Tap again for another, or drag it around (${decorList.length}/${DECOR_CAP})`);
+  persist();
+}
+
+// Runs in the capture phase on the container, before OrbitControls sees the event, so a drag on a
+// decoration moves the decoration instead of spinning the planet.
+app.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!decorating || !e.isPrimary) return;
+    const d = decorAt(e.clientX, e.clientY);
+    if (!d) return;
+    controls.enabled = false;
+    renderer.domElement.setPointerCapture(e.pointerId);
+    dragging = { d, start: [...d.data.pos], moved: false, ok: true, id: e.pointerId };
+    selectDecor(d);
+    pickKind = null;
+    renderTray();
+  },
+  { capture: true },
+);
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!dragging || e.pointerId !== dragging.id) return;
+  const n = surfacePoint(e.clientX, e.clientY);
+  if (!n) return;
+  if (!dragging.moved && new THREE.Vector3(...dragging.start).angleTo(n) < 0.02) return;
+  dragging.moved = true;
+  const problem = spotProblem(n, world.ponds, decorList, dragging.d);
+  dragging.ok = !problem;
+  dragging.d.data.pos = [n.x, n.y, n.z];
+  place(dragging.d);
+  setRing(dragging.d, true, !problem);
+  hint(problem ? PROBLEM_TEXT[problem] : 'Let go to drop it here', !!problem);
+});
+const endDrag = () => {
+  if (!dragging) return false;
+  const { d, start, moved, ok } = dragging;
+  dragging = null;
+  controls.enabled = true;
+  if (moved) {
+    if (!ok) {
+      d.data.pos = start;
+      place(d);
+      hint('That spot didn’t work, so it hopped back.', true);
+    } else {
+      hint('Moved!');
+      sound.play('select');
+      for (const [p, v] of visits) if (v.decor === d) endVisit(p);
+      persist();
+    }
+    setRing(d, true, true);
+  } else hint('Selected. Drag to move, or turn/remove it below.');
+  return true;
+};
+renderer.domElement.addEventListener('pointercancel', endDrag);
+
+// --- naps and hangouts ---------------------------------------------------
+const visits = new Map<Pet, { decor: Decor; kind: 'nap' | 'hang'; arrived: number; until: number }>();
+function endVisit(p: Pet) {
+  visits.delete(p);
+  p.goal = null;
+}
+const napping = (p: Pet) => {
+  const v = visits.get(p);
+  return !!v && v.kind === 'nap' && v.arrived > 0;
+};
+function startVisit(p: Pet, d: Decor) {
+  const spec = DECOR_KINDS.find((k) => k.kind === d.data.kind)!;
+  const at = new THREE.Vector3(...d.data.pos);
+  const side = p.up.clone().addScaledVector(at, -at.dot(p.up));
+  if (side.lengthSq() < 1e-6) side.randomDirection().addScaledVector(at, -at.dot(side));
+  p.goal = at.clone().addScaledVector(side.normalize(), 0.14).normalize();
+  visits.set(p, { decor: d, kind: spec.nap ? 'nap' : 'hang', arrived: 0, until: 0 });
+}
+function visitTick(force = false) {
+  const now = performance.now();
+  const spots = decorList.filter((d) => DECOR_KINDS.find((k) => k.kind === d.data.kind)!.nap || DECOR_KINDS.find((k) => k.kind === d.data.kind)!.hangout);
+  for (const p of pets) {
+    const v = visits.get(p);
+    if (v) {
+      if (!decorList.includes(v.decor) || p === selected || (v.arrived && now > v.until)) endVisit(p);
+      continue;
+    }
+    if (!spots.length || p === selected || p.goal || p.evolving || p.sleeping || (!force && Math.random() > 0.12)) continue;
+    const near = spots.map((d) => ({ d, a: p.up.angleTo(new THREE.Vector3(...d.data.pos)) })).filter((x) => x.a < 1.1).sort((a, b) => a.a - b.a)[0];
+    if (near && [...visits.values()].filter((x) => x.decor === near.d).length < 2) {
+      startVisit(p, near.d);
+      if (force) return;
+    }
+  }
+}
+function visitFrame(now: number) {
+  for (const [p, v] of visits) {
+    if (!v.arrived && p.goal && p.up.angleTo(p.goal) < 0.05) {
+      v.arrived = now;
+      v.until = now + (v.kind === 'nap' ? 20_000 + Math.random() * 15_000 : 12_000 + Math.random() * 8_000);
+      if (v.kind === 'hang') fx.hearts(p.headWorld(), p.up, 3);
+    }
+  }
+}
+
+// --- photo booth ---------------------------------------------------------
+let booth: { card: Postcard; nextId: number; sel: Sticker | null } | null = null;
+const boothStage = $('boothStage');
+const boothCanvas = $<HTMLCanvasElement>('boothCanvas');
+
+function boothLayout() {
+  if (!booth) return;
+  const [cw, ch] = cardSize(booth.card.photo);
+  const wrap = $('boothWrap').getBoundingClientRect();
+  const s = Math.min(wrap.width / cw, wrap.height / ch);
+  const w = Math.floor(cw * s), h = Math.floor(ch * s);
+  boothStage.style.width = `${w}px`;
+  boothStage.style.height = `${h}px`;
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  boothCanvas.width = w * dpr;
+  boothCanvas.height = h * dpr;
+  const ctx = boothCanvas.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawPostcard(ctx, w, h, booth.card, { stickers: false });
+  renderStickers();
+}
+
+function renderStickers() {
+  if (!booth) return;
+  const w = boothStage.clientWidth;
+  const box = $('boothStickers');
+  box.replaceChildren(
+    ...booth.card.stickers.map((st) => {
+      const el = document.createElement('span');
+      el.className = 'st' + (booth!.sel === st ? ' sel' : '');
+      el.dataset.id = String(st.id);
+      el.textContent = st.emoji;
+      el.style.left = `${st.x * 100}%`;
+      el.style.top = `${st.y * 100}%`;
+      el.style.fontSize = `${st.size * w}px`;
+      el.style.transform = `translate(-50%, -50%) rotate(${st.rot}rad)`;
+      el.addEventListener('pointerdown', (e) => startStickerDrag(e, st, el));
+      return el;
+    }),
+  );
+  $('boothSel').classList.toggle('hidden', !booth.sel);
+}
+
+function startStickerDrag(e: PointerEvent, st: Sticker, el: HTMLElement) {
+  e.preventDefault();
+  e.stopPropagation();
+  booth!.sel = st;
+  el.setPointerCapture(e.pointerId);
+  const rect = boothStage.getBoundingClientRect();
+  const ox = e.clientX - st.x * rect.width, oy = e.clientY - st.y * rect.height;
+  const move = (ev: PointerEvent) => {
+    st.x = Math.min(1, Math.max(0, (ev.clientX - ox) / rect.width));
+    st.y = Math.min(1, Math.max(0, (ev.clientY - oy) / rect.height));
+    el.style.left = `${st.x * 100}%`;
+    el.style.top = `${st.y * 100}%`;
+  };
+  const up = () => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up);
+    el.removeEventListener('pointercancel', up);
+    renderStickers();
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  for (const s of $('boothStickers').children) s.classList.toggle('sel', s === el);
+  $('boothSel').classList.remove('hidden');
+}
+
+function openBooth() {
+  if (booth || miniGame) return;
+  select(null);
+  if (decorating) setDecorating(false);
+  // Render one clean frame and copy it before the browser clears the WebGL buffer.
+  renderer.render(scene, camera);
+  const photo = document.createElement('canvas');
+  photo.width = renderer.domElement.width;
+  photo.height = renderer.domElement.height;
+  const pctx = photo.getContext('2d')!;
+  // The page's sky is CSS behind a transparent canvas, so paint it into the photo first.
+  const sky = getComputedStyle(document.body).backgroundImage.match(/rgb[a]?\([^)]+\)/g) ?? ['#c9b8f0', '#f2c6e3', '#ffe1c7'];
+  const g = pctx.createLinearGradient(0, 0, 0, photo.height);
+  sky.forEach((c, i) => g.addColorStop(i / Math.max(1, sky.length - 1), c));
+  pctx.fillStyle = g;
+  pctx.fillRect(0, 0, photo.width, photo.height);
+  pctx.drawImage(renderer.domElement, 0, 0);
+  const d = today();
+  const caption = `${festival ? festival.emoji : SEASONS[season].emoji} Pocket Pet Planet · ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  booth = { card: { photo, frame: 'cozy', stickers: [], caption }, nextId: 1, sel: null };
+  $('boothResult').classList.add('hidden');
+  $('booth').classList.remove('hidden');
+  sound.play('select');
+  renderBoothTools();
+  requestAnimationFrame(boothLayout);
+}
+
+function renderBoothTools() {
+  if (!booth) return;
+  $('boothFrames').replaceChildren(
+    ...FRAMES.map((f) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (booth!.card.frame === f.id ? ' on' : '');
+      b.dataset.frame = f.id;
+      b.textContent = f.name;
+      b.addEventListener('click', () => {
+        booth!.card.frame = f.id;
+        renderBoothTools();
+        boothLayout();
+      });
+      return b;
+    }),
+  );
+  $('boothPalette').replaceChildren(
+    ...STICKERS.map((emoji) => {
+      const b = document.createElement('button');
+      b.className = 'chip emoji';
+      b.dataset.sticker = emoji;
+      b.textContent = emoji;
+      b.setAttribute('aria-label', `Add ${emoji} sticker`);
+      b.addEventListener('click', () => {
+        const n = booth!.card.stickers.length;
+        const st: Sticker = { id: booth!.nextId++, emoji, x: 0.3 + ((n * 0.17) % 0.4), y: 0.3 + ((n * 0.23) % 0.4), size: 0.1, rot: (Math.random() - 0.5) * 0.5 };
+        booth!.card.stickers.push(st);
+        booth!.sel = st;
+        sound.play('wear');
+        renderStickers();
+      });
+      return b;
+    }),
+  );
+}
+
+const closeBooth = () => {
+  booth = null;
+  $('booth').classList.add('hidden');
+  clock.getDelta();
+};
+$('photoBtn').addEventListener('click', openBooth);
+$('boothClose').addEventListener('click', closeBooth);
+$('boothResultClose').addEventListener('click', () => $('boothResult').classList.add('hidden'));
+const withSel = (f: (s: Sticker) => void) => () => {
+  if (!booth?.sel) return;
+  f(booth.sel);
+  renderStickers();
+};
+$('stBigger').addEventListener('click', withSel((s) => (s.size = Math.min(0.4, s.size * 1.25))));
+$('stSmaller').addEventListener('click', withSel((s) => (s.size = Math.max(0.04, s.size / 1.25))));
+$('stTurn').addEventListener('click', withSel((s) => (s.rot += Math.PI / 8)));
+$('stRemove').addEventListener('click', () => {
+  if (!booth?.sel) return;
+  booth.card.stickers = booth.card.stickers.filter((s) => s !== booth!.sel);
+  booth.sel = null;
+  renderStickers();
+});
+$('boothStage').addEventListener('pointerdown', (e) => {
+  if (booth && e.target === boothCanvas) {
+    booth.sel = null;
+    renderStickers();
+  }
+});
+$('boothSave').addEventListener('click', async () => {
+  if (!booth) return;
+  const btn = $<HTMLButtonElement>('boothSave');
+  btn.disabled = true;
+  try {
+    const blob = await exportPostcard(booth.card);
+    const how = await deliver(blob, postcardName(new Date()));
+    lastPostcard = { bytes: blob.size, how };
+    const img = $<HTMLImageElement>('boothImg');
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
+    $('boothMsg').textContent =
+      how === 'shared'
+        ? 'Shared! 💌'
+        : how === 'cancelled'
+          ? 'Not shared. You can long-press the picture to save it.'
+          : 'Postcard saved! 💌 If nothing downloaded, long-press (or right-click) the picture to save it.';
+    $('boothResult').classList.remove('hidden');
+    sound.play('unlock');
+  } finally {
+    btn.disabled = false;
+  }
+});
+window.addEventListener('resize', () => booth && boothLayout());
+let lastPostcard: { bytes: number; how: string } | null = null;
 // --- debug ---------------------------------------------------------------
 function fastForward(hours: number) {
   for (const p of pets) decay(p.data, hours * HOUR);
@@ -714,6 +1156,7 @@ window.__ppp = {
       pos: [...p.data.pos],
       moving: p.moving,
       sleeping: p.sleeping,
+      napping: napping(p),
       look: p.data.look,
       parents: p.data.parents,
       wear: p.data.wear ?? {},
@@ -746,10 +1189,19 @@ window.__ppp = {
   __sound: sound,
   saving: () => !resetting,
   dex: () => ({ ...dex }),
+  booth: () => (booth ? { frame: booth.card.frame, stickers: booth.card.stickers.map((s) => ({ ...s })), size: cardSize(booth.card.photo), last: lastPostcard } : { last: lastPostcard }),
+  decor: () =>
+    decorList.map((d) => ({ ...d.data, screen: toScreen(d.group.position.clone().addScaledVector(d.group.position.clone().normalize(), 0.06)), visible: d.group.position.dot(camera.position) > 2.2 })),
+  probe: (x: number, y: number) => {
+    const n = surfacePoint(x, y);
+    return n ? { hit: true, problem: spotProblem(n, world.ponds, decorList) } : { hit: false, problem: null };
+  },
+  ponds: () => world.ponds.map((n) => ({ normal: n.toArray(), screen: toScreen(n.clone().multiplyScalar(R)), visible: n.dot(camera.position) > 2.2 })),
+  visits: () => [...visits].map(([p, v]) => ({ pet: p.data.id, decor: v.decor.data.id, kind: v.kind, arrived: v.arrived > 0, napping: napping(p) })),
   season: () => ({ season, festival: festival?.id ?? null, decor: seasonFx.decor, props: world.props.map((p) => p.kind), outfits: [...(game.outfits ?? [])] }),
   perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, objects: countObjects() }),
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
-  ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
+  ...(debugMode ? { visitNow: () => visitTick(true), fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
 };
 
 function countObjects(): number {
@@ -803,7 +1255,7 @@ function adaptQuality(raw: number) {
 
 renderer.setAnimationLoop(() => {
   const raw = clock.getDelta();
-  if (miniGame) {
+  if (miniGame || booth) {
     // The planet sleeps behind the mini-game overlay; needs still tick so time stays honest.
     for (const p of pets) decay(p.data, raw * 1000);
     return;
@@ -817,9 +1269,10 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   for (const p of pets) {
     decay(p.data, dt * 1000);
-    p.sleeping = dayNight.night > 0.6 && !p.evolving && now > (awakeUntil.get(p) ?? 0);
+    p.sleeping = (dayNight.night > 0.6 || napping(p)) && !p.evolving && now > (awakeUntil.get(p) ?? 0);
     const partner = courtship?.a === p ? courtship.b : courtship?.b === p ? courtship.a : null;
-    p.facing = p === selected ? camera.position : partner ? partner.group.position : null;
+    const visit = visits.get(p);
+    p.facing = p === selected ? camera.position : partner ? partner.group.position : visit?.arrived ? visit.decor.group.position : null;
     p.update(dt, t);
   }
   const wall = Date.now();
@@ -831,7 +1284,14 @@ renderer.setAnimationLoop(() => {
   if (breedTimer <= 0) {
     breedTimer = 1.5;
     breedTick();
+    visitTick();
   }
+  visitFrame(now);
+  for (const d of decorList)
+    for (const g of d.glow) {
+      g.material.opacity = dayNight.night * 0.9;
+      g.visible = dayNight.night > 0.02; // a transparent sprite still costs a draw call
+    }
   twinkleTimer -= dt;
   if (twinkleTimer <= 0) {
     twinkleTimer = 0.25;

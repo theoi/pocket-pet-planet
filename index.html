@@ -25,10 +25,48 @@
     <div id="topbar" class="topbar">
       <span id="snacks" class="pill" title="Snacks from Fruit Catch">🍓 <b id="snackCount">0</b></span>
       <button id="dexBtn" class="pill play" aria-label="Sticker book">📖 <b id="dexCount">0</b></button>
+      <button id="decoBtn" class="pill play" aria-pressed="false">🏡 <span class="lbl">Decorate</span></button>
+      <button id="photoBtn" class="pill play" aria-label="Photo booth">📷</button>
       <button id="playBtn" class="pill play">🎮 <span class="lbl">Fruit Catch</span></button>
       <button id="muteBtn" class="pill play" aria-label="Sound on" aria-pressed="false">🔊</button>
     </div>
-    <section id="dex" class="dex hidden" aria-label="Sticker book">
+    <section id="decoTray" class="deco-tray hidden" aria-label="Decorate">
+      <div id="decoHint" class="deco-hint">Pick something, then tap the planet to place it.</div>
+      <div id="decoItems" class="deco-items"></div>
+      <div id="decoSel" class="deco-sel hidden">
+        <button id="decoRotate" class="btn small">↻ Turn</button>
+        <button id="decoRemove" class="btn small">🗑 Remove</button>
+      </div>
+      <button id="decoDone" class="btn small deco-done">✓ Done</button>
+    </section>
+    <section id="booth" class="booth hidden" aria-label="Photo booth">
+      <div class="booth-head">
+        <b>📷 Photo booth</b>
+        <button id="boothClose" class="close" aria-label="Close photo booth">×</button>
+      </div>
+      <div id="boothWrap" class="booth-wrap">
+        <div id="boothStage" class="booth-stage">
+          <canvas id="boothCanvas"></canvas>
+          <div id="boothStickers" class="booth-stickers"></div>
+        </div>
+      </div>
+      <div class="booth-tools">
+        <div id="boothFrames" class="booth-row"></div>
+        <div id="boothPalette" class="booth-row"></div>
+        <div id="boothSel" class="booth-row booth-sel hidden">
+          <button id="stSmaller" class="btn small" aria-label="Smaller">−</button>
+          <button id="stBigger" class="btn small" aria-label="Bigger">+</button>
+          <button id="stTurn" class="btn small" aria-label="Turn">↻</button>
+          <button id="stRemove" class="btn small" aria-label="Remove sticker">🗑</button>
+        </div>
+        <button id="boothSave" class="btn booth-save">💾 Save postcard</button>
+      </div>
+      <div id="boothResult" class="booth-result hidden">
+        <img id="boothImg" alt="Your postcard" />
+        <p id="boothMsg"></p>
+        <button id="boothResultClose" class="btn small">OK</button>
+      </div>
+    </section>    <section id="dex" class="dex hidden" aria-label="Sticker book">
       <div class="dex-card">
         <button id="dexClose" class="close" aria-label="Close sticker book">×</button>
         <h2>📖 Sticker Book</h2>

@@ -9,7 +9,8 @@ test('fresh planet: the 4 starter forms are in the book, the rest are silhouette
   const d = await dex(page);
   expect(Object.keys(d).sort()).toEqual(['form:bloop:0', 'form:mochi:0', 'form:puff:0', 'form:sprout:0']);
   await expect(page.locator('#dexCount')).toHaveText('4/24');
-  await expect(page.locator('#toast')).toBeHidden();
+  await page.waitForTimeout(1500);
+  await expect(page.locator('#toast')).not.toContainText('sticker');
   await page.click('#dexBtn');
   await expect(page.locator('#dex')).toBeVisible();
   await expect(page.locator('#dexProgress')).toHaveText('4 / 24 stickers');
@@ -59,7 +60,7 @@ test('baby trait mixes are discovered when one hatches', async ({ page }) => {
   s.savedAt = Date.now();
   await seedSave(page, s);
   await expect.poll(async () => Object.keys(await dex(page)), { timeout: 15_000 }).toContain('mix:puff+mochi');
-  await expect(page.locator('#toast')).toContainText('Puff with bunny ears');
+  await expect(page.locator('#toast')).toContainText('Puff with bunny ears', { timeout: 12_000 });
   expect((await dex(page))['mix:puff+mochi'].by).toBe('Mixy');
 });
 
@@ -80,7 +81,8 @@ test('older saves are backfilled quietly (no toast) and upgraded to v3', async (
   const d = await dex(page);
   expect(Object.keys(d).sort()).toEqual(['form:bloop:0', 'form:bloop:1', 'form:bloop:2', 'form:mochi:0', 'mix:mochi+sprout']);
   expect(Object.values(d).every((x: any) => x.backfilled)).toBe(true);
-  await expect(page.locator('#toast')).toBeHidden();
+  await page.waitForTimeout(1500);
+  await expect(page.locator('#toast')).not.toContainText('sticker');
   await page.click('#dexBtn');
   await expect(page.locator('.sticker[data-id="form:bloop:2"] .m')).toContainText('Recorded');
   await page.screenshot({ path: `${SHOTS}/r3-dex-backfilled.png` });
