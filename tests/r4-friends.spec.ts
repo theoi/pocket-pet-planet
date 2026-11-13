@@ -109,13 +109,19 @@ test('two pets hang out at the same bench on their own: a diary page and friends
   test.setTimeout(150_000);
   const errors = trackErrors(page);
   const bench = unit([0, 0.45, 0.9]);
-  const s = await planet(page, '?time=12:00&weather=clear&date=2026-11-03', [[0.12, 0.45, 0.88], [-0.12, 0.45, 0.88]], {
+  // All four pets start around the bench. Which two end up sharing it is up to them: pets wander off and come
+  // back at random (a probe showed one pair drifting 2 rad away for over a minute), so any pair counts.
+  const s = await planet(page, '?time=12:00&weather=clear&date=2026-11-03', [[0.12, 0.45, 0.88], [-0.12, 0.45, 0.88], [0, 0.57, 0.82], [0, 0.33, 0.94]], {
     decor: [{ id: 'b1', kind: 'bench', pos: bench, rot: 0 }],
   });
-  const [a, b] = s.pets;
-  await expect
+  const names = s.pets.map((p: any) => p.name).join('|');
+  const text = await expect
     .poll(async () => (await diary(page)).find((e) => /hung out by the bench/.test(e.text))?.text, { timeout: 120_000, intervals: [1000] })
-    .toMatch(new RegExp(`^(${a.name} and ${b.name}|${b.name} and ${a.name}) hung out by the bench$`));
+    .toMatch(new RegExp(`^(${names}) and (${names}) hung out by the bench$`))
+    .then(async () => (await diary(page)).find((e) => /hung out by the bench/.test(e.text))!.text);
+  const [, n1, n2] = new RegExp(`^(${names}) and (${names}) hung out`).exec(text)!;
+  const [a, b] = [n1, n2].map((n) => s.pets.find((p: any) => p.name === n));
+  expect(a.id).not.toBe(b.id);
   expect((await friends(page))[key(a.id, b.id)]).toBeGreaterThan(0.5);
   await page.screenshot({ path: `${SHOTS}/r4-bench-friends.png` });
   expect(errors).toEqual([]);

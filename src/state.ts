@@ -61,6 +61,9 @@ export interface Game {
   /** Plot growth (keyed by the plot decoration's id) and the seed bag. */
   garden?: { plots: Record<string, PlotData>; seeds: Partial<Record<SeedKind, number>> };
   harvests?: number;
+  /** Night visitor: arrivals by night key, and how many times we've met. */
+  visits?: Record<string, { at: number; left?: boolean }>;
+  visitorMet?: number;
 }
 
 interface SaveV1 {
@@ -221,6 +224,8 @@ export function migrate(parsed: SaveV1 | SaveV2 | SaveV3 | SaveData): (Game & { 
       diary: v4 ? cleanDiary(parsed.diary) : undefined,
       garden: v4 ? cleanGarden(parsed.garden, Date.now()) : undefined,
       harvests: v4 ? num(parsed.harvests, 0) : undefined,
+      visits: v4 && parsed.visits && typeof parsed.visits === 'object' ? Object.fromEntries(Object.entries(parsed.visits).filter(([, v]) => v && typeof v.at === 'number')) : undefined,
+      visitorMet: v4 ? num(parsed.visitorMet, 0) : undefined,
     };
   }
   return null;

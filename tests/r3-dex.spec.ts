@@ -15,7 +15,8 @@ test('fresh planet: the 4 starter forms are in the book, the rest are silhouette
   await expect(page.locator('#dex')).toBeVisible();
   await expect(page.locator('#dexProgress')).toHaveText('4 / 24 stickers');
   await expect(page.locator('.sticker.found')).toHaveCount(4);
-  await expect(page.locator('.sticker.locked')).toHaveCount(20);
+  await expect(page.locator('#dexForms .sticker.locked, #dexMixes .sticker.locked')).toHaveCount(20);
+  await expect(page.locator('#dexGuests .sticker.locked')).toHaveCount(1); // round 4: the night visitor
   await expect(page.locator('#dexMixes .sticker')).toHaveCount(12);
   const found = page.locator('.sticker[data-id="form:puff:0"]');
   await expect(found.locator('.n')).toHaveText('Baby Puff');

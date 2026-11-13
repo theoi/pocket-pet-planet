@@ -346,3 +346,11 @@ body.decorating .title p { visibility: hidden; }
 .plot-seeds .chip { flex: 1; font-size: 11px; }
 .plot-actions { gap: 8px; }
 .plot-actions .btn.hidden { display: none; }
+
+/* --- night visitor shop --- */
+.shop-card { background: linear-gradient(170deg, rgba(255, 250, 253, 0.95), rgba(235, 228, 255, 0.95)); }
+.shop-card .pet-name { padding-right: 36px; }
+.wares { display: grid; gap: 6px; margin-top: 4px; }
+.ware { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.85); border-radius: 14px; padding: 6px 8px; font-weight: 700; font-size: 14px; }
+.ware .e { font-size: 22px; text-align: center; }
+.ware .btn { min-width: 84px; }

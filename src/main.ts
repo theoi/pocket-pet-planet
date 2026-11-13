@@ -4,7 +4,8 @@ import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
 import { Sound } from './audio';
-import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isSeasonal, unlockedAt } from './accessories';
+import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isOwnedOnly, unlockedAt } from './accessories';
+import { isVisitorNight, nightKey, parseVisitorOverride, Visitor, VISITOR, visitorSticker, WARES } from './visitor';
 import { SeasonFX } from './seasonfx';
 import { cardSize, deliver, drawPostcard, exportPostcard, FRAMES, postcardName, STICKERS, type Postcard, type Sticker } from './photobooth';
 import { buildDecor, DECOR_CAP, DECOR_KINDS, isDecorKind, place, setRing, spotProblem, type Decor, type DecorKind } from './decorate';
@@ -161,18 +162,18 @@ function renderWardrobe() {
   const wear = selected.data.wear ?? {};
   const owned = game.outfits ?? [];
   // Seasonal gifts you own come first; ones from other seasons show as locked teasers at the end.
-  const order = [...ACCESSORIES.filter((a) => isSeasonal(a) && owned.includes(a.id)), ...ACCESSORIES.filter((a) => !isSeasonal(a)), ...ACCESSORIES.filter((a) => isSeasonal(a) && !owned.includes(a.id))];
+  const order = [...ACCESSORIES.filter((a) => isOwnedOnly(a) && owned.includes(a.id)), ...ACCESSORIES.filter((a) => !isOwnedOnly(a)), ...ACCESSORIES.filter((a) => isOwnedOnly(a) && !owned.includes(a.id))];
   box.replaceChildren(
     ...order.map((a) => {
       const b = document.createElement('button');
       const unlocked = isAvailable(a, game.totalCare, owned);
-      const when = a.season ? SEASONS[a.season].name : a.festival ? FESTIVALS.find((f) => f.id === a.festival)!.name : '';
+      const when = a.season ? SEASONS[a.season].name : a.festival ? FESTIVALS.find((f) => f.id === a.festival)!.name : a.visitor ? 'Night visitor' : '';
       const on = wear[a.slot] === a.id;
       b.className = 'chip' + (on ? ' on' : '');
       b.dataset.id = a.id;
       b.disabled = !unlocked;
-      if (isSeasonal(a)) b.classList.add('seasonal');
-      b.title = unlocked ? a.name : when ? `A gift during ${when}` : `Unlocks at ${a.unlock} care`;
+      if (isOwnedOnly(a)) b.classList.add('seasonal');
+      b.title = unlocked ? a.name : a.visitor ? 'Sold by a visitor on special nights' : when ? `A gift during ${when}` : `Unlocks at ${a.unlock} care`;
       b.innerHTML = `<span class="e">${unlocked ? a.emoji : '🔒'}</span><span>${unlocked ? a.name : when || `${a.unlock} care`}</span>`;
       b.addEventListener('click', () => toggleWear(a.id));
       return b;
@@ -268,6 +269,15 @@ function renderDex() {
   };
   $('dexForms').replaceChildren(...DEX.filter((e) => e.kind === 'form').map(card));
   $('dexMixes').replaceChildren(...DEX.filter((e) => e.kind === 'mix').map(card));
+  const g = dex['guest:twinkle'];
+  const el = document.createElement('div');
+  el.className = 'sticker ' + (g ? 'found' : 'locked') + (freshStickers.has('guest:twinkle') ? ' new' : '');
+  el.dataset.id = 'guest:twinkle';
+  el.innerHTML = '<img alt=""><div class="n"></div><div class="m"></div>';
+  (el.children[0] as HTMLImageElement).src = visitorSticker(!!g);
+  el.children[1].textContent = g ? 'Twinkle the star peddler' : '???';
+  el.children[2].textContent = g ? `Met ${formatWhen(g.at)} · ${g.where}` : 'Visits on some clear nights';
+  $('dexGuests').replaceChildren(el);
 }
 $('dexBtn').addEventListener('click', () => {
   select(null);
@@ -582,6 +592,7 @@ function select(pet: Pet | null) {
   document.body.classList.toggle('panel-open', !!pet);
   if (pet) {
     if (openPlot) closePlot();
+    if (shopOpen) closeShop();
     sound.play('select');
     pet.setSelected(true);
     panel.classList.remove('hidden');
@@ -904,9 +915,22 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   const plotHits = decorList.filter((d) => d.data.kind === 'plot').map((d) => d.hit);
-  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit), ...plotHits], false);
+  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit), ...plotHits, ...(visitor ? [visitor.hit] : [])], false);
   const first = hits[0];
-  const plotHit = first?.object.userData.decor as Decor | undefined;
+  if (first?.object.userData.visitor) {
+    openShop();
+    return;
+  }
+  // Pets have generous hit spheres, so a pet idling next to a plot shouldn't swallow taps aimed at the plot:
+  // when both are under the finger, the one whose centre is nearer the tap wins.
+  const planetAt = hits.findIndex((h) => h.object === world.planet);
+  let plotHit = hits.slice(0, planetAt < 0 ? undefined : planetAt).find((h) => h.object.userData.decor)?.object.userData.decor as Decor | undefined;
+  const petFirst = first?.object.userData.pet as Pet | undefined;
+  if (plotHit && petFirst) {
+    const ps = toScreen(petFirst.centerWorld());
+    const ds = toScreen(plotHit.group.position);
+    if (Math.hypot(ps.x - e.clientX, ps.y - e.clientY) < Math.hypot(ds.x - e.clientX, ds.y - e.clientY)) plotHit = undefined;
+  }
   if (plotHit) {
     openPlotCard(plotHit);
     return;
@@ -1337,6 +1361,128 @@ $('plotHarvest').addEventListener('click', () => {
 });
 $('plotClose').addEventListener('click', closePlot);
 
+// --- night visitor -------------------------------------------------------
+const visitorOverride = parseVisitorOverride();
+let visitor: Visitor | null = null;
+let shopOpen = false;
+game.visits ??= {};
+const visitLog = game.visits;
+function visitorWanted(): boolean {
+  const key = nightKey(new Date());
+  const rec = visitLog[key];
+  if (rec?.left) return false;
+  // Arrives once it's properly dark and stays until dawn; rain or snow keeps it away (unless it's already here).
+  if (dayNight.night < (visitor ? 0.4 : 0.75)) return false;
+  if (!visitor && weather.kind !== 'clear') return false;
+  return visitorOverride ?? isVisitorNight(key, !!festival);
+}
+function visitorTick() {
+  const want = visitorWanted();
+  const key = nightKey(new Date());
+  if (want && !visitor) {
+    const camDir = camera.position.clone().normalize();
+    // Somewhere on the side you're looking at, clear of the pond and decorations.
+    let up = camDir.clone();
+    for (let i = 0; i < 30; i++) {
+      const c = camDir.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(0.55)).normalize();
+      if (c.dot(camDir) < 0.7) continue;
+      if (spotProblem(c, world.ponds, decorList)) continue;
+      up = c;
+      break;
+    }
+    const returning = !!visitLog[key];
+    visitor = new Visitor(up, camDir, returning);
+    scene.add(visitor.group, visitor.trailObject);
+    if (!returning) {
+      visitLog[key] = { at: Date.now() };
+      game.visitorMet = (game.visitorMet ?? 0) + 1;
+      sound.play('unlock');
+      toast(`${VISITOR.emoji} A shooting star! ${VISITOR.name} ${VISITOR.title} has landed. Tap to trade!`);
+      note('🌠', `A shooting star brought ${VISITOR.name} ${VISITOR.title} to the planet`);
+      if (!dex[VISITOR_DEX]) {
+        dex[VISITOR_DEX] = { at: Date.now(), by: VISITOR.name, where: regionName([up.x, up.y, up.z]) };
+        freshStickers.add(VISITOR_DEX);
+      }
+      for (const k of Object.keys(visitLog).sort().slice(0, -30)) delete visitLog[k];
+      persist();
+    }
+  } else if (!want && visitor && visitor.state !== 'leaving' && visitor.state !== 'gone') {
+    visitor.leave();
+    if (shopOpen) closeShop();
+    if (visitLog[key] && dayNight.night < 0.4) {
+      visitLog[key].left = true;
+      note('👋', `${VISITOR.name} waved goodbye and flew home at dawn`);
+      persist();
+    }
+  }
+  if (visitor?.state === 'gone') {
+    scene.remove(visitor.group, visitor.trailObject);
+    visitor = null;
+  }
+}
+const VISITOR_DEX = 'guest:twinkle';
+function openShop() {
+  if (!visitor || visitor.state !== 'here') return;
+  select(null);
+  if (openPlot) closePlot();
+  shopOpen = true;
+  renderShop();
+  $('shop').classList.remove('hidden');
+  sound.play('select');
+  floatAt(...(Object.values(toScreen(visitor.headWorld())).slice(0, 2) as [number, number]), '✨ Hello!');
+}
+const closeShop = () => {
+  shopOpen = false;
+  $('shop').classList.add('hidden');
+};
+function renderShop() {
+  $('shopSnacks').textContent = String(game.snacks);
+  const owned = game.outfits ?? [];
+  $('shopWares').replaceChildren(
+    ...WARES.map((w) => {
+      const row = document.createElement('div');
+      row.className = 'ware';
+      row.dataset.ware = w.id;
+      const a = w.kind === 'outfit' ? accessoryById(w.item)! : null;
+      const seed = w.kind === 'seed' ? SEEDS[w.item as SeedKind] : null;
+      const have = a ? owned.includes(a.id) : false;
+      row.innerHTML = '<span class="e"></span><span class="n"></span><button class="btn small"></button>';
+      row.children[0].textContent = a ? a.emoji : seed!.emoji;
+      row.children[1].textContent = a ? `${a.name}` : `${seed!.name} seed (rare)`;
+      const b = row.children[2] as HTMLButtonElement;
+      b.textContent = have ? 'Owned ✓' : `${w.price} 🍓`;
+      b.disabled = have || game.snacks < w.price;
+      b.addEventListener('click', () => buy(w.id));
+      return row;
+    }),
+  );
+}
+function buy(id: string) {
+  const w = WARES.find((x) => x.id === id);
+  if (!w || !visitor || game.snacks < w.price) return;
+  game.outfits ??= [];
+  if (w.kind === 'outfit' && game.outfits.includes(w.item)) return;
+  game.snacks -= w.price;
+  let what: string;
+  if (w.kind === 'outfit') {
+    game.outfits.push(w.item);
+    const a = accessoryById(w.item)!;
+    what = `a ${a.name}`;
+    toast(`${a.emoji} Got the ${a.name}! Find it under 👒 Wear`);
+  } else {
+    giveSeed(w.item as SeedKind);
+    what = `a ${SEEDS[w.item as SeedKind].name.toLowerCase()} seed`;
+    toast(`${SEEDS[w.item as SeedKind].emoji} A rare seed! Plant it in a garden plot`);
+  }
+  note('🛍️', `Traded ${w.price} snacks with ${VISITOR.name} for ${what}`);
+  fx.sparkles(visitor.headWorld(), visitor.up, 16, 0.4);
+  sound.play('wear');
+  updateSnacks();
+  persist();
+  renderShop();
+}
+$('shopClose').addEventListener('click', closeShop);
+
 // --- photo booth ---------------------------------------------------------
 let booth: { card: Postcard; nextId: number; sel: Sticker | null } | null = null;
 const boothStage = $('boothStage');
@@ -1611,6 +1757,10 @@ window.__ppp = {
   saving: () => !resetting,
   dex: () => ({ ...dex }),
   friends: () => ({ ...friends }),
+  visitor: () =>
+    visitor
+      ? { state: visitor.state, screen: toScreen(visitor.group.position.clone().addScaledVector(visitor.up, 0.32)), visible: visitor.group.position.dot(camera.position) > 2.2, shop: shopOpen, night: nightKey(new Date()), log: { ...visitLog } }
+      : { state: 'none', shop: shopOpen, night: nightKey(new Date()), log: { ...visitLog } },
   garden: () => ({
     seeds: { ...garden.seeds },
     plots: plots().map((d) => {
@@ -1718,7 +1868,9 @@ renderer.setAnimationLoop(() => {
     visitTick();
     friendTick(now);
     gardenTick();
+    visitorTick();
   }
+  visitor?.update(dt, t, camera.position);
   visitFrame(now);
   seekFrame(now);
   for (const d of decorList)

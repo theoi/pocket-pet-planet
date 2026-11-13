@@ -15,6 +15,8 @@ export interface Accessory {
   /** Seasonal/festival items are gifted while their season or festival is on, then kept forever. */
   season?: Season;
   festival?: Festival['id'];
+  /** Only sold by the night visitor. */
+  visitor?: boolean;
 }
 
 export const ACCESSORIES: Accessory[] = [
@@ -36,16 +38,21 @@ export const ACCESSORIES: Accessory[] = [
   { id: 'pumpkinhat', name: 'Pumpkin hat', emoji: '🎃', slot: 'head', unlock: 0, festival: 'pumpkin' },
   { id: 'lanternhat', name: 'Lantern hat', emoji: '🏮', slot: 'head', unlock: 0, festival: 'lantern' },
   { id: 'fairylights', name: 'Fairy lights', emoji: '✨', slot: 'neck', unlock: 0, festival: 'winterlights' },
+  { id: 'cometcap', name: 'Comet cap', emoji: '☄️', slot: 'head', unlock: 0, visitor: true },
+  { id: 'stardust', name: 'Stardust scarf', emoji: '🌌', slot: 'neck', unlock: 0, visitor: true },
+  { id: 'moonhalo', name: 'Moon halo', emoji: '🌙', slot: 'head', unlock: 0, visitor: true },
 ];
 
 export const isSeasonal = (a: Accessory) => !!(a.season || a.festival);
-/** Whether an item can be worn: care-unlocked, or a seasonal gift the player has received. */
-export const isAvailable = (a: Accessory, totalCare: number, owned: string[]) => (isSeasonal(a) ? owned.includes(a.id) : totalCare >= a.unlock);
+/** Items you have to be given or buy (not unlocked by care). */
+export const isOwnedOnly = (a: Accessory) => isSeasonal(a) || !!a.visitor;
+/** Whether an item can be worn: care-unlocked, or a gift/purchase the player owns. */
+export const isAvailable = (a: Accessory, totalCare: number, owned: string[]) => (isOwnedOnly(a) ? owned.includes(a.id) : totalCare >= a.unlock);
 export const giftsFor = (season: Season, festival: Festival['id'] | undefined) =>
   ACCESSORIES.filter((a) => a.season === season || (festival && a.festival === festival));
 
 export const accessoryById = (id: string | undefined) => ACCESSORIES.find((a) => a.id === id);
-export const unlockedAt = (totalCare: number) => ACCESSORIES.filter((a) => !isSeasonal(a) && totalCare >= a.unlock);
+export const unlockedAt = (totalCare: number) => ACCESSORIES.filter((a) => !isOwnedOnly(a) && totalCare >= a.unlock);
 
 const sphere = new THREE.SphereGeometry(1, 20, 14);
 const basics = new Map<string, THREE.MeshBasicMaterial>();
@@ -257,6 +264,45 @@ export function buildAccessory(id: string, tint: string): THREE.Group | null {
         b.scale.setScalar(0.08);
         g.add(b);
       }
+      break;
+    }
+    case 'cometcap': {
+      g.position.set(0.1, 1.74, 0);
+      g.rotation.set(-0.2, 0, -0.2);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon('#5e60ce'));
+      cap.scale.set(0.6, 0.42, 0.6);
+      g.add(cap);
+      g.add(m(cyl, '#ffd166', [0, 0.02, 0], [0.62, 0.06, 0.62]));
+      // The comet's tail streams back off the cap.
+      for (let i = 0; i < 4; i++) g.add(m(sphere, ['#fff1a8', '#ffe066', '#ffd1e8', '#c3c8ff'][i], [0, 0.38 - i * 0.05, -0.25 - i * 0.2], [0.12 - i * 0.022, 0.1 - i * 0.018, 0.14 - i * 0.02]));
+      g.add(m(cone, '#fff1a8', [0, 0.46, 0.04], [0.09, 0.16, 0.09]));
+      break;
+    }
+    case 'stardust': {
+      g.position.set(0, 0.6, 0);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.13, 10, 40), toon('#6a5acd'));
+      ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+      g.add(m(sphere, '#6a5acd', [0.45, -0.2, 0.8], [0.13, 0.32, 0.08], [0.2, 0, 0.25]));
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const dot = new THREE.Mesh(sphere, basic(i % 3 ? '#fff6a8' : '#ffffff'));
+        dot.position.set(Math.cos(a) * 1.02, 0.04 * Math.sin(i * 2.3), Math.sin(a) * 1.02);
+        dot.scale.setScalar(0.04);
+        g.add(dot);
+      }
+      break;
+    }
+    case 'moonhalo': {
+      g.position.set(0, 2.0, -0.05);
+      g.rotation.x = -0.2;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 36), basic('#fff6c2'));
+      ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+      const moon = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.055, 8, 20, Math.PI * 1.25), basic('#fff1a8'));
+      moon.position.set(0, 0.24, 0);
+      moon.rotation.z = Math.PI * 0.6; // a crescent standing on the halo
+      g.add(moon);
       break;
     }
     default:
