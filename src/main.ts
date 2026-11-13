@@ -619,6 +619,7 @@ window.__ppp = {
   minigame: () => miniGame?.state() ?? null,
   audio: () => ({ state: sound.state, muted: sound.muted }),
   weather: () => weather.view(),
+  flowerNormals: () => world.flowers.map((f) => f.normal.toArray()),
   __sound: sound,
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),

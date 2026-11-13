@@ -26,9 +26,10 @@ export function trackErrors(page: Page): string[] {
 
 /** Open the app on a brand-new planet (no saved progress). */
 export async function freshStart(page: Page, query = ''): Promise<void> {
-  await page.goto(query);
+  // Clear storage from a same-origin page that isn't the app, so no pagehide autosave can undo it.
+  await page.goto('blank.html');
   await page.evaluate(() => localStorage.clear());
-  await page.reload();
+  await page.goto(query);
   await ready(page);
 }
 

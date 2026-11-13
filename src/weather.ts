@@ -152,6 +152,7 @@ export class Weather {
     this.rain = k === 'rain' ? 1 : 0;
     this.snow = k === 'snow' ? 1 : 0;
     this.rainbow = k === 'rainbow' ? 1 : 0;
+    this.dust = k === 'snow' ? 1 : 0;
   }
 
   set(kind: WeatherKind, night = 0): void {
@@ -199,7 +200,7 @@ export class Weather {
         if (first) {
           this.kind = next;
           this.rain = next === 'rain' ? 1 : 0;
-          this.snow = next === 'snow' ? 1 : 0;
+          this.snow = this.dust = next === 'snow' ? 1 : 0;
         } else this.set(next, night);
       }
     }
@@ -218,7 +219,7 @@ export class Weather {
     this.cloudColor.set('#ffffff').lerp(new THREE.Color('#bcb4d6'), this.rain * 0.85).lerp(new THREE.Color('#eef0ff'), this.snow * 0.5);
     this.world.cloudMat.color.copy(this.cloudColor);
     for (const c of this.extra) c.cloud.scale.setScalar(Math.max(0.001, cloudy));
-    this.tint.style.opacity = String(cloudy * 0.55);
+    this.tint.style.opacity = String(cloudy * (0.35 - night * 0.2));
 
     this.updateRain(dt);
     this.updateSnow(dt, time);

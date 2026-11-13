@@ -6,7 +6,7 @@ const sky = (page: import('@playwright/test').Page) =>
 
 test('night (?time=22:00): dark sky, fireflies, pets asleep with zzz; feeding wakes one', async ({ page }) => {
   const errors = trackErrors(page);
-  await freshStart(page, '?time=22:00');
+  await freshStart(page, '?time=22:00&weather=clear');
   const s = await sky(page);
   expect(s.hour).toBe(22);
   expect(s.night).toBe(1);
@@ -30,14 +30,14 @@ test('night (?time=22:00): dark sky, fireflies, pets asleep with zzz; feeding wa
 });
 
 test('day (?time=12:00) and dusk (?time=19:00) skies', async ({ page }) => {
-  await freshStart(page, '?time=12:00');
+  await freshStart(page, '?time=12:00&weather=clear');
   let s = await sky(page);
   expect(s.night).toBe(0);
   expect(s.fireflies).toBe(0);
   await expect(page.locator('#clock')).toContainText('☀️ 12:00');
   expect((await pets(page)).some((p: any) => p.sleeping)).toBe(false);
 
-  await page.goto('?time=19:00');
+  await page.goto('?time=19:00&weather=clear');
   await page.waitForFunction(() => (window as any).__ppp?.ready === true);
   s = await sky(page);
   expect(s.night).toBeGreaterThan(0.2);
