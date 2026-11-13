@@ -1,4 +1,5 @@
 import { cleanDiary, cleanFriendships, type DiaryEntry, type Friendships } from './friends';
+import { cleanGarden, type PlotData, type SeedKind } from './garden';
 
 export type Species = 'mochi' | 'puff' | 'bloop' | 'sprout';
 export type Vec3 = [number, number, number];
@@ -57,6 +58,9 @@ export interface Game {
   friends?: Friendships;
   /** Little dated moments, oldest first, capped. */
   diary?: DiaryEntry[];
+  /** Plot growth (keyed by the plot decoration's id) and the seed bag. */
+  garden?: { plots: Record<string, PlotData>; seeds: Partial<Record<SeedKind, number>> };
+  harvests?: number;
 }
 
 interface SaveV1 {
@@ -215,6 +219,8 @@ export function migrate(parsed: SaveV1 | SaveV2 | SaveV3 | SaveData): (Game & { 
       // Undefined (not empty) tells the game this save predates friendships, so it can backfill family bonds.
       friends: v4 ? cleanFriendships(parsed.friends, ids) : undefined,
       diary: v4 ? cleanDiary(parsed.diary) : undefined,
+      garden: v4 ? cleanGarden(parsed.garden, Date.now()) : undefined,
+      harvests: v4 ? num(parsed.harvests, 0) : undefined,
     };
   }
   return null;

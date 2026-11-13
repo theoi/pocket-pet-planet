@@ -26,15 +26,16 @@ test('fresh planet: the diary opens with a first page, and the unread dot clears
   const errors = trackErrors(page);
   await freshStart(page, '?time=12:00&weather=clear&date=2026-11-13');
   const d = await diary(page);
-  expect(d.map((e) => e.key)).toEqual(['start', 'season:autumn:2026', 'fest:lantern:2026', undefined]);
+  expect(d.map((e) => e.key)).toEqual(['start', 'season:autumn:2026', 'fest:lantern:2026', undefined, 'seeds:starter']);
   expect(d[0].text).toMatch(/ moved onto the planet$/);
   expect(d[3].text).toMatch(/^Got .*Lantern hat as a Lantern Festival gift$/);
+  expect(d[4].text).toBe('Got a starter pack of seeds: 3 strawberry and 2 blueberry');
   await expect(page.locator('#diaryDot')).toBeVisible();
   await page.click('#diaryBtn');
   await expect(page.locator('#diary')).toBeVisible();
   await expect(page.locator('#diaryEntries h3').first()).toHaveText('Today');
-  await expect(page.locator('#diaryEntries .entry')).toHaveCount(4);
-  await expect(page.locator('#diaryEntries .entry').first()).toContainText('Lantern hat'); // newest first
+  await expect(page.locator('#diaryEntries .entry')).toHaveCount(5);
+  await expect(page.locator('#diaryEntries .entry').first()).toContainText('starter pack'); // newest first
   await expect(page.locator('#diaryPairs')).toContainText('No friendships yet');
   await page.keyboard.press('Escape');
   await expect(page.locator('#diary')).toBeHidden();
@@ -42,7 +43,7 @@ test('fresh planet: the diary opens with a first page, and the unread dot clears
   // Reloading the same day doesn't repeat the season or festival pages.
   await page.reload();
   await ready(page);
-  expect((await diary(page)).length).toBe(4);
+  expect((await diary(page)).length).toBe(5);
   expect((await savedGame(page)).version).toBe(4);
   expect(errors).toEqual([]);
 });
@@ -50,10 +51,12 @@ test('fresh planet: the diary opens with a first page, and the unread dot clears
 test('pets that stay near each other become best friends: toast, diary page, hearts in the panel', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = trackErrors(page);
-  const s = await planet(page, '?time=12:00&weather=clear&date=2026-11-03', [[0, 0.5, 0.86], [0.04, 0.52, 0.85]]);
+  // At night they sleep side by side, so they can't wander apart before the first friendship tick.
+  const s = await planet(page, '?time=21:30&weather=clear&date=2026-11-03', [[0, 0.5, 0.86], [0.04, 0.52, 0.85]]);
   const [a, b] = s.pets;
   await seedSave(page, { ...s, savedAt: Date.now(), friends: { [key(a.id, b.id)]: 49.97 }, diary: [] , version: 4 });
-  await expect(page.locator('#toast')).toContainText(`${a.name} and ${b.name} became best friends`, { timeout: 60_000 });
+  await expect.poll(async () => (await friends(page))[key(a.id, b.id)], { timeout: 60_000 }).toBeGreaterThanOrEqual(50);
+  await expect(page.locator('#toast')).toContainText(`${a.name} and ${b.name} became best friends`, { timeout: 10_000 });
   expect((await friends(page))[key(a.id, b.id)]).toBeGreaterThanOrEqual(50);
   const page1 = (await diary(page)).find((e) => e.key === `lvl:${key(a.id, b.id)}:Best friends`)!;
   expect(page1.text).toBe(`${a.name} and ${b.name} became best friends`);

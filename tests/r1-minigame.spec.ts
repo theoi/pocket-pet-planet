@@ -40,6 +40,10 @@ test('desktop: fruit catch with the mouse earns snacks; treats spend them', asyn
   expect(s.score).toBeGreaterThanOrEqual(s.caught);
   expect(s.reward).toBe(Math.min(10, Math.ceil(s.score / 3)));
   await expect(page.locator('#gameReward')).toContainText(`+${s.reward} snack`);
+  // Round 4: a good round (4+ snacks) also finds a garden seed.
+  const seeds = await page.evaluate(() => Object.values((window as any).__ppp.garden().seeds).reduce((a: number, b: any) => a + b, 0));
+  expect(seeds).toBe(5 + (s.reward >= 4 ? 1 : 0)); // the starter pack has 5
+  if (s.reward >= 4) await expect(page.locator('#gameReward')).toContainText('seed');
   await page.screenshot({ path: `${SHOTS}/r1-minigame-end.png` });
   await page.click('#gameDone');
   await expect(page.locator('#game')).toBeHidden();

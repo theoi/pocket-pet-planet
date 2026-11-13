@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { canvasTexture, mergeByMaterial, placeOnSphere, toon } from './toon';
 import { POND_ANGLE, R } from './world';
 
-export type DecorKind = 'cottage' | 'shroomhouse' | 'lantern' | 'flowerbed' | 'bench' | 'well';
+export type DecorKind = 'cottage' | 'shroomhouse' | 'lantern' | 'flowerbed' | 'bench' | 'well' | 'plot';
 
 export interface DecorData {
   id: string;
@@ -18,6 +18,7 @@ export const DECOR_KINDS: { kind: DecorKind; name: string; emoji: string; nap?: 
   { kind: 'lantern', name: 'Lantern', emoji: '🏮' },
   { kind: 'flowerbed', name: 'Flower bed', emoji: '🌷' },
   { kind: 'well', name: 'Wishing well', emoji: '🪣', hangout: true },
+  { kind: 'plot', name: 'Garden plot', emoji: '🌱' },
 ];
 export const DECOR_CAP = 24;
 /** Minimum angular gap between two decorations. */
@@ -101,6 +102,11 @@ function model(kind: DecorKind): { g: THREE.Group; glowAt?: V3[]; top: number } 
       for (const s of [-1, 1]) g.add(p(box, '#b9906c', [0.06 * s, 0.02, 0], [0.01, 0.04, 0.04]));
       return { g, top: 0.1 };
     }
+    case 'plot': {
+      g.add(p(box, '#c99a7a', [0, 0.012, 0], [0.2, 0.024, 0.15]));
+      for (const z of [-0.035, 0.035]) g.add(p(box, '#8e6a5a', [0, 0.026, z], [0.17, 0.006, 0.012]));
+      return { g, top: 0.12 };
+    }
     case 'well': {
       g.add(p(cyl, '#e6dff0', [0, 0.035, 0], [0.06, 0.07, 0.06]));
       g.add(p(cyl, '#a9d4ff', [0, 0.071, 0], [0.048, 0.004, 0.048]));
@@ -115,11 +121,16 @@ export interface Decor {
   data: DecorData;
   group: THREE.Group;
   hit: THREE.Mesh;
+  /** Garden plots only: the soil top (tinted when wet) and the plant growing in it. */
+  soil?: THREE.Mesh;
+  plant?: THREE.Group;
   glow: THREE.Sprite[];
   ring: THREE.Mesh;
   top: number;
 }
 
+export const soilDry = toon('#b58b6a');
+export const soilWet = toon('#8a6248');
 const ringGeo = new THREE.TorusGeometry(0.13, 0.008, 6, 36);
 const ringOk = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95 });
 const ringBad = new THREE.MeshBasicMaterial({ color: '#ff6f91', transparent: true, opacity: 0.95 });
@@ -148,6 +159,13 @@ export function buildDecor(data: DecorData): Decor {
   // Built at "prop" scale; houses read better at roughly pet scale.
   group.scale.setScalar(DECOR_SCALE);
   const d: Decor = { data, group, hit, glow, ring, top };
+  if (data.kind === 'plot') {
+    d.soil = new THREE.Mesh(box, soilDry);
+    d.soil.position.y = 0.0245;
+    d.soil.scale.set(0.185, 0.002, 0.135);
+    d.plant = new THREE.Group();
+    group.add(d.soil, d.plant);
+  }
   hit.userData.decor = d;
   place(d);
   return d;

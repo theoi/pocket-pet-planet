@@ -17,6 +17,8 @@ import { DEX, dexEntry, entriesFor, formatWhen, regionName, sticker } from './de
 import { parseWeatherOverride, Weather } from './weather';
 import { buildWorld, R } from './world';
 import { FESTIVALS, festivalOf, fmtRange, parseDateOverride, SEASONS, seasonOf } from './seasons';
+import { emptyPlot, grow, hoursLeft, plantModel, progress, SEED_KINDS, SEEDS, STAGE_NAMES, STARTER_SEEDS, stageOf, WET_MS, type SeedKind } from './garden';
+import { soilDry, soilWet } from './decorate';
 import { and, befriend, dayLabel, friendsOf, heartsOf, levelOf, LEVELS, pairKey, writeDiary } from './friends';
 
 const HOUR = 3600_000;
@@ -579,6 +581,7 @@ function select(pet: Pet | null) {
   $('wardrobe').classList.add('hidden');
   document.body.classList.toggle('panel-open', !!pet);
   if (pet) {
+    if (openPlot) closePlot();
     sound.play('select');
     pet.setSelected(true);
     panel.classList.remove('hidden');
@@ -680,6 +683,13 @@ function openMiniGame() {
     (score) => {
       sound.play('gameEnd');
       game.snacks += score;
+      // A good round shakes a seed loose from the fruit tree.
+      if (score >= 4) {
+        const k = SEED_KINDS[Math.floor(Math.random() * SEED_KINDS.length)];
+        giveSeed(k);
+        $('gameReward').textContent += ` + ${SEEDS[k].emoji} seed`;
+        note('🎮', `${d.name} played Fruit Catch and found a ${SEEDS[k].name.toLowerCase()} seed`);
+      }
       d.joy = Math.min(100, d.joy + 15);
       wake(pet);
       persist();
@@ -893,8 +903,14 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   }
   ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit)], false);
+  const plotHits = decorList.filter((d) => d.data.kind === 'plot').map((d) => d.hit);
+  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit), ...plotHits], false);
   const first = hits[0];
+  const plotHit = first?.object.userData.decor as Decor | undefined;
+  if (plotHit) {
+    openPlotCard(plotHit);
+    return;
+  }
   const pet = first?.object.userData.pet as Pet | undefined;
   // Eggs are small and usually sit right next to their parents' generous hit spheres, so they win ties.
   const planetIdx = hits.findIndex((h) => h.object === world.planet);
@@ -968,6 +984,7 @@ function setDecorating(on: boolean) {
   $('decoTray').classList.toggle('hidden', !on);
   if (on) {
     select(null);
+    if (openPlot) closePlot();
     pickKind = null;
     hint(DEFAULT_HINT);
     renderTray();
@@ -990,6 +1007,11 @@ $('decoRemove').addEventListener('click', () => {
   selectDecor(null);
   decorList.splice(decorList.indexOf(d), 1);
   scene.remove(d.group);
+  if (d.data.kind === 'plot') {
+    const p = garden.plots[d.data.id];
+    if (p?.seed && stageOf(p) < 4) giveSeed(p.seed); // the seed goes back in the bag
+    delete garden.plots[d.data.id];
+  }
   for (const [p, v] of visits) if (v.decor === d) endVisit(p);
   fx.sparkles(d.group.position.clone(), d.group.position.clone().normalize(), 10, 0.3);
   sound.play('full');
@@ -1042,6 +1064,7 @@ function placeDecor(kind: DecorKind, n: THREE.Vector3) {
   const d = buildDecor({ id: Math.floor(Math.random() * 1e9).toString(36), kind, pos: [n.x, n.y, n.z], rot });
   decorList.push(d);
   scene.add(d.group);
+  if (kind === 'plot') showPlot(d);
   fx.sparkles(n.clone().multiplyScalar(R + 0.05), n, 12, 0.35);
   sound.play('wear');
   hint(`Placed! Tap again for another, or drag it around (${decorList.length}/${DECOR_CAP})`);
@@ -1156,6 +1179,163 @@ function visitFrame(now: number) {
     }
   }
 }
+
+// --- garden plots --------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const firstGarden = !game.garden;
+game.garden ??= { plots: {}, seeds: { ...STARTER_SEEDS } };
+const garden = game.garden;
+if (firstGarden) note('🌱', `Got a starter pack of seeds: ${and(SEED_KINDS.filter((k) => STARTER_SEEDS[k]).map((k) => `${STARTER_SEEDS[k]} ${SEEDS[k].name.toLowerCase()}`))}`, 'seeds:starter');
+/** ?gardenSkip=H pretends H more hours passed for the garden (tests and impatient gardeners). */
+const gardenSkipH = Math.max(0, Math.min(24 * 30, Number(params.get('gardenSkip')) || 0));
+const plotOf = (d: Decor) => (garden.plots[d.data.id] ??= emptyPlot(Date.now()));
+const plotStage = new WeakMap<Decor, number>();
+function showPlot(d: Decor) {
+  const p = plotOf(d);
+  const st = stageOf(p);
+  if (plotStage.get(d) !== st) {
+    plotStage.set(d, st);
+    d.plant!.clear();
+    d.plant!.add(plantModel(p));
+  }
+  d.soil!.material = p.wetUntil > Date.now() ? soilWet : soilDry;
+}
+const plots = () => decorList.filter((d) => d.data.kind === 'plot');
+for (const d of plots()) {
+  const p = plotOf(d);
+  if (gardenSkipH) {
+    p.at -= gardenSkipH * HOUR;
+    p.wetUntil = Math.min(p.wetUntil, p.at); // skipped hours count as dry
+  }
+  grow(p, Date.now());
+  showPlot(d);
+}
+for (const id of Object.keys(garden.plots)) if (!decorList.some((d) => d.data.id === id)) delete garden.plots[id];
+persist();
+const seedCount = (k: SeedKind) => garden.seeds[k] ?? 0;
+function giveSeed(k: SeedKind, n = 1) {
+  garden.seeds[k] = Math.min(99, seedCount(k) + n);
+}
+function gardenTick() {
+  const now = Date.now();
+  const raining = weather.rain > 0.5;
+  for (const d of plots()) {
+    const p = plotOf(d);
+    grow(p, now);
+    if (raining && p.wetUntil < now + WET_MS - 60_000) p.wetUntil = now + WET_MS;
+    showPlot(d);
+  }
+  if (openPlot) renderPlot();
+}
+
+let openPlot: Decor | null = null;
+function openPlotCard(d: Decor) {
+  select(null);
+  openPlot = d;
+  renderPlot();
+  $('plotCard').classList.remove('hidden');
+  sound.play('select');
+}
+const closePlot = () => {
+  openPlot = null;
+  $('plotCard').classList.add('hidden');
+};
+function renderPlot() {
+  const d = openPlot;
+  if (!d || !decorList.includes(d)) return closePlot();
+  const p = plotOf(d);
+  const st = stageOf(p);
+  const wet = p.wetUntil > Date.now();
+  const kind = p.seed ? SEEDS[p.seed] : null;
+  $('plotTitle').textContent = kind ? `${kind.emoji} ${kind.name} plot` : '🌱 Garden plot';
+  $('plotStage').textContent = STAGE_NAMES[st];
+  $('plotBar').style.width = `${(progress(p) * 100).toFixed(1)}%`;
+  const left = hoursLeft(p);
+  $('plotNote').textContent = !p.seed
+    ? 'Pick a seed to plant.'
+    : st === 4
+      ? 'Ready to pick!'
+      : `Ripe in about ${left < 1 ? 'an hour' : `${Math.ceil(wet ? left / 1.5 : left)} h`}${wet ? ' · soil is wet 💧 (growing faster)' : ' · water it to grow 1.5× faster'}`;
+  const seedsBox = $('plotSeeds');
+  seedsBox.classList.toggle('hidden', !!p.seed);
+  if (!p.seed)
+    seedsBox.replaceChildren(
+      ...SEED_KINDS.map((k) => {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.seed = k;
+        b.disabled = seedCount(k) <= 0;
+        b.innerHTML = `<span class="e">${SEEDS[k].emoji}</span><span>${SEEDS[k].name} ×${seedCount(k)}</span>`;
+        b.addEventListener('click', () => plant(k));
+        return b;
+      }),
+    );
+  const water = $<HTMLButtonElement>('plotWater');
+  water.classList.toggle('hidden', !p.seed || st === 4);
+  water.disabled = wet;
+  water.textContent = wet ? '💧 Watered' : '💧 Water';
+  const harvest = $<HTMLButtonElement>('plotHarvest');
+  harvest.classList.toggle('hidden', st !== 4);
+  if (kind) harvest.textContent = `🧺 Harvest (+${kind.yield} ${kind.emoji})`;
+  $('plotBag').textContent = `Seed bag: ${SEED_KINDS.map((k) => `${SEEDS[k].emoji}${seedCount(k)}`).join(' ')}`;
+}
+function plotFx(d: Decor, kind: 'plant' | 'water' | 'harvest') {
+  const up = d.group.position.clone().normalize();
+  const at = d.group.position.clone().addScaledVector(up, 0.12);
+  if (kind === 'water') fx.sparkles(at, up, 14, 0.3);
+  else if (kind === 'harvest') fx.hearts(at, up, 6);
+  else fx.sparkles(at, up, 8, 0.25);
+  const s = toScreen(at);
+  floatAt(s.x, s.y, kind === 'plant' ? '🌱 Planted!' : kind === 'water' ? '💧' : '🧺 Yum!');
+}
+function plant(k: SeedKind) {
+  const d = openPlot;
+  if (!d || seedCount(k) <= 0) return;
+  const p = plotOf(d);
+  if (p.seed) return;
+  garden.seeds[k] = seedCount(k) - 1;
+  Object.assign(p, { seed: k, grown: 0, at: Date.now(), plantedAt: Date.now() });
+  showPlot(d);
+  plotFx(d, 'plant');
+  sound.play('wear');
+  note('🌱', `Planted ${SEEDS[k].name.toLowerCase()} seeds`);
+  persist();
+  renderPlot();
+}
+$('plotWater').addEventListener('click', () => {
+  const d = openPlot;
+  if (!d) return;
+  const p = plotOf(d);
+  grow(p, Date.now());
+  p.wetUntil = Date.now() + WET_MS;
+  showPlot(d);
+  plotFx(d, 'water');
+  sound.play('bloom');
+  persist();
+  renderPlot();
+});
+$('plotHarvest').addEventListener('click', () => {
+  const d = openPlot;
+  if (!d) return;
+  const p = plotOf(d);
+  if (!p.seed || stageOf(p) !== 4) return;
+  const k = p.seed;
+  const s = SEEDS[k];
+  game.snacks += s.yield;
+  const back = Math.random() < 0.35 ? 2 : 1;
+  giveSeed(k, back);
+  garden.plots[d.data.id] = { ...emptyPlot(Date.now()), wetUntil: p.wetUntil };
+  game.harvests = (game.harvests ?? 0) + 1;
+  showPlot(d);
+  plotFx(d, 'harvest');
+  sound.play('unlock');
+  updateSnacks();
+  toast(`🧺 Picked ${s.yield} ${s.plural}! +${s.yield} treats 🍓 · ${back} seed${back > 1 ? 's' : ''} back`);
+  note('🧺', `Harvested ${s.yield} ${s.plural} from the garden`);
+  persist();
+  renderPlot();
+});
+$('plotClose').addEventListener('click', closePlot);
 
 // --- photo booth ---------------------------------------------------------
 let booth: { card: Postcard; nextId: number; sel: Sticker | null } | null = null;
@@ -1431,6 +1611,13 @@ window.__ppp = {
   saving: () => !resetting,
   dex: () => ({ ...dex }),
   friends: () => ({ ...friends }),
+  garden: () => ({
+    seeds: { ...garden.seeds },
+    plots: plots().map((d) => {
+      const p = plotOf(d);
+      return { id: d.data.id, pos: d.data.pos, ...p, stage: stageOf(p), progress: progress(p), wet: p.wetUntil > Date.now(), screen: toScreen(d.group.position.clone().addScaledVector(d.group.position.clone().normalize(), 0.1)), visible: d.group.position.dot(camera.position) > 2.2 };
+    }),
+  }),
   diary: () => diary.map((e) => ({ ...e })),
   seeks: () => [...seeks].map(([p, s]) => ({ pet: p.data.id, friend: s.friend.data.id })),
   booth: () => (booth ? { frame: booth.card.frame, stickers: booth.card.stickers.map((s) => ({ ...s })), size: cardSize(booth.card.photo), last: lastPostcard } : { last: lastPostcard }),
@@ -1530,6 +1717,7 @@ renderer.setAnimationLoop(() => {
     breedTick();
     visitTick();
     friendTick(now);
+    gardenTick();
   }
   visitFrame(now);
   seekFrame(now);

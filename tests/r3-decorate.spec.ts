@@ -10,7 +10,7 @@ test('decorate with the mouse: place, refuse the pond, drag to move, turn, remov
   await page.click('#decoBtn');
   await expect(page.locator('#decoTray')).toBeVisible();
   await expect(page.locator('#decoBtn')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#decoItems .chip')).toHaveCount(6);
+  await expect(page.locator('#decoItems .chip')).toHaveCount(7); // round 4 added the garden plot
 
   await page.click('.chip[data-kind="cottage"]');
   const [s1] = await validSpots(page);
