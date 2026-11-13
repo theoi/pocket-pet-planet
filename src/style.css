@@ -172,3 +172,41 @@ body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
   background: rgba(255, 255, 255, 0.7); padding: 4px 6px; border-radius: 10px;
 }
 .debug button { font: inherit; font-size: 11px; border-radius: 8px; border: 1px solid #ccb; background: #fff; cursor: pointer; }
+
+/* Landscape phones: dock a compact panel on the right so the planet (shifted left in JS) stays visible. */
+@media (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  .panel {
+    left: auto; right: max(8px, env(safe-area-inset-right)); top: 44px; bottom: auto; transform: none;
+    width: min(300px, 42vw); max-height: calc(100dvh - 52px); overflow-y: auto; overscroll-behavior: contain;
+    padding: 8px 12px 10px; border-radius: 20px; animation-name: pop-side;
+  }
+  .head { margin-bottom: 2px; gap: 8px; }
+  .mood-emoji { font-size: 24px; }
+  .pet-name { font-size: 17px; }
+  .pet-form { font-size: 11px; }
+  .mood-line { font-size: 11px; margin: 0 0 4px; }
+  .bar { margin: 3px 0; font-size: 11px; grid-template-columns: 42px 1fr; }
+  .track { height: 9px; }
+  .care-note { font-size: 11px; margin: 2px 0 6px; min-height: 0; }
+  .actions { gap: 4px; }
+  .actions .btn { padding: 5px 2px; font-size: 11px; border-radius: 12px; }
+  .actions .btn .e { font-size: 15px; }
+  .close { top: 4px; right: 6px; width: 30px; height: 30px; font-size: 22px; }
+  .rename { margin: 2px 0 4px; }
+  .rename input { padding: 5px 8px; font-size: 14px; }
+  .btn.small { padding: 5px 10px; }
+  .wardrobe { margin-top: 6px; }
+  .wardrobe-items .chip { flex-basis: 54px; padding: 4px 2px 3px; }
+  .chip .e { font-size: 16px; }
+  .title h1 { font-size: 20px; }
+  .title p { font-size: 11px; }
+  /* No room for the title beside the top bar once the planet slides left. */
+  body.panel-open .title { display: none; }
+  .toast { top: 54px; }
+}
+
+.stale {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(320px, calc(100vw - 32px));
+  background: var(--card); border-radius: 22px; padding: 16px 18px; text-align: center; font-weight: 700; font-size: 14px;
+  box-shadow: 0 10px 30px rgba(130, 80, 150, 0.3); display: flex; flex-direction: column; gap: 10px; align-items: center;
+}

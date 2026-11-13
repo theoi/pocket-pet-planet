@@ -54,9 +54,12 @@ interface SaveV1 {
 export interface SaveData extends Game {
   version: 2;
   savedAt: number;
+  /** When the writing tab opened; the most recently opened tab owns the save. */
+  claim?: number;
 }
 
 const KEY = 'pocket-pet-planet:v1';
+export const SAVE_KEY = KEY;
 const HOUR = 3600_000;
 
 export const RATES = { foodPerHour: 5, joyPerHour: 3, hungryJoyPerHour: 3, hungryBelow: 30 };
@@ -190,7 +193,7 @@ export function load(now = Date.now()): { data: Game; offlineMs: number; fresh: 
       if (game) {
         const offlineMs = Math.min(MAX_OFFLINE_MS, Math.max(0, now - game.savedAt));
         game.pets.forEach((p) => decay(p, offlineMs));
-        const { savedAt: _, ...data } = game;
+        const { savedAt: _, claim: __, ...data } = game as typeof game & { claim?: number };
         return { data, offlineMs, fresh: false };
       }
     }
@@ -200,8 +203,8 @@ export function load(now = Date.now()): { data: Game; offlineMs: number; fresh: 
   return { data: defaultSave(), offlineMs: 0, fresh: true };
 }
 
-export function save(game: Game, now = Date.now()): void {
-  const data: SaveData = { version: 2, savedAt: now, ...game };
+export function save(game: Game, claim?: number, now = Date.now()): void {
+  const data: SaveData = { version: 2, savedAt: now, claim, ...game };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {

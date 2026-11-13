@@ -6,7 +6,7 @@ import { Pet } from './pet';
 import { Sound } from './audio';
 import { accessoryById, ACCESSORIES, unlockedAt } from './accessories';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
-import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
+import { SAVE_KEY, clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
 import { colorOf, featureOf } from './eggs';
 import { FruitCatch } from './minigame';
@@ -82,12 +82,13 @@ weather.onBloom = (pos, up) => {
   sound.play('bloom');
 };
 
+const tabClaim = performance.timeOrigin + Math.random();
 const persist = () => {
   if (resetting) return;
   game.pets = pets.map((p) => p.data);
   game.eggs = eggs.map((e) => e.data);
   game.flowers = weather.blooms.map((b) => Math.round(b * 1000) / 1000);
-  save(game);
+  save(game, tabClaim);
 };
 const addCare = (d: PetData, amount: number) => {
   const before = unlockedAt(game.totalCare).length;
@@ -155,6 +156,22 @@ function toggleWear(id: string) {
 }
 persist();
 setInterval(persist, 3000);
+// Another tab saved: stop autosaving here so we never overwrite its newer planet. Reloading makes this tab the
+// active one again (its first save then parks the other tab the same way), so two tabs never ping-pong.
+window.addEventListener('storage', (e) => {
+  if (e.key !== SAVE_KEY || resetting) return;
+  let claim = Infinity; // a cleared or foreign write also parks us
+  try {
+    claim = (e.newValue && JSON.parse(e.newValue).claim) ?? Infinity;
+  } catch {
+    // unreadable: treat as someone else's
+  }
+  // An older tab's last autosaves before it notices us must not park the newer tab.
+  if (claim <= tabClaim) return;
+  resetting = true;
+  $('staleBanner').classList.remove('hidden');
+});
+$('staleReload').addEventListener('click', () => location.reload());
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') persist();
@@ -223,6 +240,7 @@ function select(pet: Pet | null) {
   selected = pet;
   renameForm.classList.add('hidden');
   $('wardrobe').classList.add('hidden');
+  document.body.classList.toggle('panel-open', !!pet);
   if (pet) {
     sound.play('select');
     pet.setSelected(true);
@@ -621,6 +639,7 @@ window.__ppp = {
   weather: () => weather.view(),
   flowerNormals: () => world.flowers.map((f) => f.normal.toArray()),
   __sound: sound,
+  saving: () => !resetting,
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
 };
@@ -628,9 +647,23 @@ window.__ppp = {
 // --- loop ----------------------------------------------------------------
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
+  viewShift = -1; // force the view offset to be recomputed for the new size
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// On landscape phones the panel is docked on the right; slide the planet into the space left of it.
+const dockedPanel = window.matchMedia('(max-height: 520px) and (min-aspect-ratio: 4/3)');
+let viewShift = 0;
+function updateViewShift(dt: number) {
+  const target = selected && dockedPanel.matches ? (panel.getBoundingClientRect().width + 16) / 2 : 0;
+  if (Math.abs(target - viewShift) < 0.5 && (target !== 0 || viewShift === 0)) return;
+  viewShift += (target - viewShift) * Math.min(1, dt * 8);
+  if (Math.abs(target - viewShift) < 0.5) viewShift = target;
+  const w = window.innerWidth, h = window.innerHeight;
+  if (viewShift === 0) camera.clearViewOffset();
+  else camera.setViewOffset(w, h, viewShift, 0, w, h);
+}
 
 const clock = new THREE.Clock();
 let panelTimer = 0;
@@ -701,6 +734,7 @@ renderer.setAnimationLoop(() => {
   world.update(dt);
   controls.update();
 
+  updateViewShift(dt);
   if (selected) {
     const s = toScreen(selected.headWorld(tagPos));
     tag.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
