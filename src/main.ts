@@ -10,6 +10,7 @@ import { SAVE_KEY, clearSave, decay, formName, load, MAX_STAGE, moodOf, save, ST
 import { DayNight, parseTimeOverride } from './daynight';
 import { colorOf, featureOf } from './eggs';
 import { FruitCatch } from './minigame';
+import { DEX, dexEntry, entriesFor, formatWhen, regionName, sticker } from './dex';
 import { parseWeatherOverride, Weather } from './weather';
 import { buildWorld } from './world';
 
@@ -172,6 +173,78 @@ window.addEventListener('storage', (e) => {
   $('staleBanner').classList.remove('hidden');
 });
 $('staleReload').addEventListener('click', () => location.reload());
+
+// --- collect-a-dex -------------------------------------------------------
+game.dex ??= {};
+const dex = game.dex;
+const freshStickers = new Set<string>();
+/** Record anything new that pets on the planet show; quiet for saves made before the dex existed. */
+function scanDex(mode: 'loud' | 'quiet' | 'backfill' = 'loud'): void {
+  const quiet = mode !== 'loud';
+  const found: string[] = [];
+  for (const p of pets) {
+    for (const id of entriesFor(p.data)) {
+      if (dex[id]) continue;
+      dex[id] = { at: Date.now(), by: p.data.name, where: regionName(p.data.pos), ...(mode === 'backfill' ? { backfilled: true } : {}) };
+      found.push(id);
+    }
+  }
+  if (!found.length) return;
+  updateDexCount();
+  persist();
+  if (quiet) return;
+  for (const id of found) freshStickers.add(id);
+  const names = found.map((id) => dexEntry(id)!.name);
+  toast(`New sticker${names.length > 1 ? 's' : ''}! 📖 ${names.join(', ')}`);
+  sound.play('unlock');
+  if (!$('dex').classList.contains('hidden')) renderDex();
+}
+function updateDexCount() {
+  $('dexCount').textContent = `${Object.keys(dex).filter((id) => dexEntry(id)).length}/${DEX.length}`;
+}
+function renderDex() {
+  const n = DEX.filter((e) => dex[e.id]).length;
+  $('dexProgress').textContent = `${n} / ${DEX.length} stickers`;
+  $('dexBar').style.width = `${(n / DEX.length) * 100}%`;
+  const card = (e: (typeof DEX)[number]) => {
+    const d = dex[e.id];
+    const el = document.createElement('div');
+    el.className = 'sticker ' + (d ? 'found' : 'locked') + (freshStickers.has(e.id) ? ' new' : '');
+    el.dataset.id = e.id;
+    const img = document.createElement('img');
+    img.alt = d ? e.name : 'Undiscovered';
+    img.src = sticker(e, !!d);
+    const name = document.createElement('div');
+    name.className = 'n';
+    name.textContent = d ? e.name : '???';
+    const meta = document.createElement('div');
+    meta.className = 'm';
+    meta.textContent = d ? `${d.backfilled ? 'Recorded' : 'Found'} ${formatWhen(d.at)} · ${d.where} · by ${d.by}` : e.hint;
+    el.append(img, name, meta);
+    return el;
+  };
+  $('dexForms').replaceChildren(...DEX.filter((e) => e.kind === 'form').map(card));
+  $('dexMixes').replaceChildren(...DEX.filter((e) => e.kind === 'mix').map(card));
+}
+$('dexBtn').addEventListener('click', () => {
+  select(null);
+  renderDex();
+  $('dex').classList.remove('hidden');
+});
+const closeDex = () => {
+  $('dex').classList.add('hidden');
+  freshStickers.clear();
+};
+$('dexClose').addEventListener('click', closeDex);
+$('dex').addEventListener('click', (e) => {
+  if (e.target === $('dex')) closeDex();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('dex').classList.contains('hidden')) closeDex();
+});
+// A brand-new planet's starters are simply "found"; an older save's pets are "recorded" retroactively.
+scanDex(loaded.fresh ? 'quiet' : Object.keys(dex).length === 0 ? 'backfill' : 'loud');
+updateDexCount();
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') persist();
@@ -264,6 +337,7 @@ function checkEvolve(pet: Pet) {
     sound.play('evolve');
     floater(pet, `✨ ${formName(d)}! ✨`);
     refreshPanel();
+    scanDex();
   });
 }
 
@@ -508,6 +582,7 @@ function hatch(egg: Egg) {
   floater(pet, `🐣 Meet ${d.name}!`);
   sound.play('hatch');
   persist();
+  scanDex();
 }
 
 function pokeEgg(egg: Egg) {
@@ -640,6 +715,7 @@ window.__ppp = {
   flowerNormals: () => world.flowers.map((f) => f.normal.toArray()),
   __sound: sound,
   saving: () => !resetting,
+  dex: () => ({ ...dex }),
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
 };

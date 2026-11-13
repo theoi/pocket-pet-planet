@@ -43,6 +43,8 @@ export interface Game {
   lastEggAt: number;
   /** Per-flower bloom (0 bud … 1 open), indexed like the planet's flowers. */
   flowers?: number[];
+  /** Collect-a-dex: entry id → when/where/who first discovered it. */
+  dex?: Record<string, { at: number; by: string; where: string; backfilled?: boolean }>;
 }
 
 interface SaveV1 {
@@ -51,8 +53,13 @@ interface SaveV1 {
   pets: PetData[];
 }
 
-export interface SaveData extends Game {
+interface SaveV2 extends Game {
   version: 2;
+  savedAt: number;
+}
+
+export interface SaveData extends Game {
+  version: 3;
   savedAt: number;
   /** When the writing tab opened; the most recently opened tab owns the save. */
   claim?: number;
@@ -158,7 +165,7 @@ function isPet(x: unknown): x is PetData {
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
 /** Accepts v1 saves (pets only) and v2 saves, always returning a complete v2 game. */
-export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number }) | null {
+export function migrate(parsed: SaveV1 | SaveV2 | SaveData): (Game & { savedAt: number }) | null {
   if (!parsed || !Array.isArray(parsed.pets) || !parsed.pets.every(isPet) || parsed.pets.length === 0) return null;
   if (parsed.version === 1) {
     return {
@@ -170,8 +177,9 @@ export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number })
       lastEggAt: 0,
     };
   }
-  if (parsed.version === 2) {
+  if (parsed.version === 2 || parsed.version === 3) {
     parsed.pets.forEach(cleanWear);
+    const dex = parsed.version === 3 && parsed.dex && typeof parsed.dex === 'object' ? parsed.dex : undefined;
     return {
       savedAt: num(parsed.savedAt, Date.now()),
       pets: parsed.pets,
@@ -180,6 +188,7 @@ export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number })
       totalCare: num(parsed.totalCare, 0),
       lastEggAt: num(parsed.lastEggAt, 0),
       flowers: Array.isArray(parsed.flowers) ? parsed.flowers.map((x) => num(x, 0.35)) : undefined,
+      dex,
     };
   }
   return null;
@@ -204,7 +213,7 @@ export function load(now = Date.now()): { data: Game; offlineMs: number; fresh: 
 }
 
 export function save(game: Game, claim?: number, now = Date.now()): void {
-  const data: SaveData = { version: 2, savedAt: now, claim, ...game };
+  const data: SaveData = { version: 3, savedAt: now, claim, ...game };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {

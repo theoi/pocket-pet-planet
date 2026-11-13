@@ -23,9 +23,21 @@
     </div>
     <div id="topbar" class="topbar">
       <span id="snacks" class="pill" title="Snacks from Fruit Catch">🍓 <b id="snackCount">0</b></span>
-      <button id="playBtn" class="pill play">🎮 Fruit Catch</button>
+      <button id="dexBtn" class="pill play" aria-label="Sticker book">📖 <b id="dexCount">0</b></button>
+      <button id="playBtn" class="pill play">🎮 <span class="lbl">Fruit Catch</span></button>
       <button id="muteBtn" class="pill play" aria-label="Sound on" aria-pressed="false">🔊</button>
     </div>
+    <section id="dex" class="dex hidden" aria-label="Sticker book">
+      <div class="dex-card">
+        <button id="dexClose" class="close" aria-label="Close sticker book">×</button>
+        <h2>📖 Sticker Book</h2>
+        <div class="dex-progress"><div class="track"><div id="dexBar" class="fill care"></div></div><span id="dexProgress"></span></div>
+        <h3>Critters &amp; forms</h3>
+        <div id="dexForms" class="dex-grid"></div>
+        <h3>Baby mixes</h3>
+        <div id="dexMixes" class="dex-grid"></div>
+      </div>
+    </section>
     <section id="game" class="game hidden">
       <canvas id="gameCanvas"></canvas>
       <div id="gameHud" class="game-hud"></div>

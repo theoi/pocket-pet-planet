@@ -173,6 +173,30 @@ body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
 }
 .debug button { font: inherit; font-size: 11px; border-radius: 8px; border: 1px solid #ccb; background: #fff; cursor: pointer; }
 
+.dex { position: fixed; inset: 0; z-index: 9; background: rgba(120, 90, 150, 0.25); display: flex; align-items: center; justify-content: center; }
+.dex-card {
+  position: relative; width: min(560px, calc(100vw - 20px)); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain;
+  background: #fffaf3; border-radius: 26px; padding: 16px 16px 20px; box-shadow: 0 12px 34px rgba(130, 80, 150, 0.3);
+  background-image: radial-gradient(#f3e6f7 1.2px, transparent 1.2px); background-size: 16px 16px;
+  animation: pop-side 0.25s cubic-bezier(.3, 1.6, .5, 1);
+}
+.dex-card h2 { margin: 0 0 8px; font-size: 22px; }
+.dex-card h3 { margin: 14px 0 6px; font-size: 14px; color: var(--soft); }
+.dex-progress { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; font-weight: 800; font-size: 13px; }
+.dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.sticker {
+  background: rgba(255, 255, 255, 0.8); border-radius: 18px; padding: 6px 6px 8px; text-align: center; font-size: 11px;
+  box-shadow: 0 2px 0 #efe0f2;
+}
+.sticker img { width: 84px; height: 84px; display: block; margin: 0 auto; }
+.sticker .n { font-weight: 800; font-size: 12px; margin-top: 2px; }
+.sticker .m { color: var(--soft); margin-top: 2px; line-height: 1.25; }
+.sticker.found img { transform: rotate(-4deg); }
+.sticker.new { animation: wiggle 0.6s ease 2; box-shadow: 0 0 0 2px var(--pink); }
+.sticker.locked .n { color: #b3a6c4; }
+@keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+@media (max-width: 560px) { .pill.play .lbl { display: none; } }
+
 /* Landscape phones: dock a compact panel on the right so the planet (shifted left in JS) stays visible. */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
   .panel {

@@ -1,4 +1,5 @@
-import { SPECIES, type Species } from './state';
+import { drawCritter } from './critter2d';
+import { type Species } from './state';
 
 export interface Player {
   name: string;
@@ -321,102 +322,13 @@ export class FruitCatch {
 
   private drawPet(t: number) {
     const { ctx } = this;
-    const { color, feature } = this.player;
-    const accent = SPECIES[feature].accent;
     const x = this.petX;
     const happy = this.happyT > 0;
     const hop = happy ? Math.sin((this.happyT / 0.35) * Math.PI) * 10 : Math.abs(Math.sin(t * 6)) * (Math.abs(this.targetX - this.petX) > 4 ? 5 : 1.5);
-    const y = this.catchY + 4 - hop;
-    const r = 34;
-    ctx.save();
     ctx.fillStyle = 'rgba(122,90,140,0.18)';
     ctx.beginPath();
     ctx.ellipse(x, this.catchY + 38, 30, 7, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.translate(x, y);
-    ctx.fillStyle = color;
-    // Head feature behind the body
-    if (feature === 'mochi') {
-      for (const s of [-1, 1]) {
-        ctx.save();
-        ctx.rotate(0.22 * s);
-        ctx.beginPath();
-        ctx.ellipse(13 * s, -r - 14, 8, 22, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffd9e8';
-        ctx.beginPath();
-        ctx.ellipse(13 * s, -r - 14, 4, 15, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-    } else if (feature === 'puff') {
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(10 * s, -r + 4);
-        ctx.lineTo(24 * s, -r - 16);
-        ctx.lineTo(30 * s, -r + 12);
-        ctx.fill();
-      }
-    } else if (feature === 'bloop') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(0, -r);
-      ctx.lineTo(0, -r - 14);
-      ctx.stroke();
-      ctx.fillStyle = accent;
-      ctx.beginPath();
-      ctx.arc(0, -r - 18, 6, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = accent;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.ellipse(8 * s, -r - 6, 9, 4, 0.5 * s, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r, r * 0.92, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff7fb';
-    ctx.beginPath();
-    ctx.ellipse(0, 9, r * 0.6, r * 0.48, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#3d3047';
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      if (happy) {
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#3d3047';
-        ctx.arc(12 * s, -6, 5, Math.PI * 1.1, Math.PI * 1.9);
-        ctx.stroke();
-      } else {
-        ctx.ellipse(12 * s, -6, 4.5, 5.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(12 * s + 1.5, -8, 1.6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#3d3047';
-      }
-    }
-    ctx.fillStyle = 'rgba(255,143,184,0.75)';
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.ellipse(22 * s, 3, 6, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#3d3047';
-    ctx.beginPath();
-    if (happy) ctx.ellipse(0, 4, 6, 6, 0, 0, Math.PI);
-    else ctx.arc(0, 2, 4, 0.15 * Math.PI, 0.85 * Math.PI);
-    if (happy) ctx.fill();
-    else {
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawCritter(ctx, x, this.catchY + 4 - hop, 34, { ...this.player, happy });
   }
 }
