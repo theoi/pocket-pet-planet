@@ -37,6 +37,23 @@ export async function ready(page: Page): Promise<void> {
   await page.waitForTimeout(600);
 }
 
+/** Replace the saved game before the app boots (a plain reload would let the app's pagehide save overwrite it). */
+export async function seedSave(page: Page, data: unknown): Promise<void> {
+  const tag = 'seed-' + Math.random().toString(36).slice(2);
+  await page.addInitScript(
+    ([d, t]) => {
+      if (sessionStorage.getItem(t as string)) return;
+      sessionStorage.setItem(t as string, '1');
+      localStorage.setItem('pocket-pet-planet:v1', JSON.stringify(d));
+    },
+    [data, tag] as const,
+  );
+  await page.reload();
+  await ready(page);
+}
+
+export const savedGame = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('pocket-pet-planet:v1')!));
+
 export const pets = (page: Page) => page.evaluate(() => (window as any).__ppp.pets()) as Promise<PetView[]>;
 export const cameraPos = (page: Page) => page.evaluate(() => (window as any).__ppp.camera()) as Promise<number[]>;
 export const selectedId = (page: Page) => page.evaluate(() => (window as any).__ppp.selected()) as Promise<string | null>;

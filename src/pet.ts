@@ -64,6 +64,8 @@ export class Pet {
   private onEvolveSwap: (() => void) | null = null;
   selected = false;
   facing: THREE.Vector3 | null = null;
+  /** A place this pet is heading to on purpose (e.g. to meet a partner); overrides wandering. */
+  goal: THREE.Vector3 | null = null;
   moving = false;
   sleeping = false;
   private lean = 0;
@@ -96,11 +98,13 @@ export class Pet {
     const { species, stage } = this.data;
     this.shownStage = stage;
     const spec = SPECIES[species];
-    const color = spec.colors[stage] ?? spec.colors[0];
+    const look = this.data.look;
+    const feat = look?.feature ?? species;
+    const color = look ? '#' + new THREE.Color(look.color).offsetHSL(0, 0.04 * stage, -0.035 * stage).getHexString() : spec.colors[stage] ?? spec.colors[0];
     const bodyMat = toon(color);
     const dark = '#' + new THREE.Color(color).offsetHSL(0, 0.05, -0.08).getHexString();
     const darkMat = toon(dark);
-    const accentMat = toon(spec.accent);
+    const accentMat = toon(SPECIES[feat].accent);
     this.body.clear();
     this.eyes = [];
     this.wings = [];
@@ -121,7 +125,16 @@ export class Pet {
     }
 
     let top = 1.95;
-    if (species === 'mochi') {
+    if (look?.spots) {
+      const spotMat = toon(look.spots);
+      for (const [x, y, z, s] of [[0.45, 1.55, -0.5, 0.16], [-0.3, 1.7, -0.45, 0.12], [-0.6, 1.1, -0.65, 0.14], [0.2, 1.2, -0.9, 0.11]]) {
+        const n = new THREE.Vector3(x, (y - 1) / 0.92, z).normalize();
+        const spot = mesh(smallSphere, spotMat, [n.x * 0.98, 1 + n.y * 0.9, n.z * 0.98], [s, s, s * 0.4]);
+        spot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+        b.add(spot);
+      }
+    }
+    if (feat === 'mochi') {
       for (const s of [-1, 1]) {
         const ear = new THREE.Group();
         ear.position.set(0.36 * s, 1.75, -0.05);
@@ -132,14 +145,14 @@ export class Pet {
         b.add(ear);
       }
       top = 2.75;
-    } else if (species === 'puff') {
+    } else if (feat === 'puff') {
       for (const s of [-1, 1]) {
         b.add(mesh(cone, bodyMat, [0.52 * s, 1.78, 0], [0.26, 0.42, 0.2], [0, 0, -0.42 * s]));
         b.add(mesh(cone, toon('#ffe9ef'), [0.5 * s, 1.74, 0.07], [0.14, 0.26, 0.08], [0, 0, -0.42 * s]));
       }
       for (const s of [-1, 1]) b.add(mesh(cyl, inkMat, [0.42 * s, 0.96, 0.92], [0.008, 0.28, 0.008], [0, 0, Math.PI / 2 + 0.15 * s]));
       top = 2.1;
-    } else if (species === 'bloop') {
+    } else if (feat === 'bloop') {
       b.add(mesh(cyl, darkMat, [0, 2.05, 0], [0.04, 0.35, 0.04]));
       b.add(mesh(sphere, accentMat, [0, 2.3, 0], [0.17, 0.17, 0.17]));
       if (stage >= 1) {
@@ -223,6 +236,14 @@ export class Pet {
     return out.copy(this.up).multiplyScalar(R + this.size);
   }
 
+  /** Give the spot `from` some room (e.g. a fresh egg). */
+  stepAway(from: THREE.Vector3): void {
+    const dir = this.up.clone().sub(from);
+    if (dir.lengthSq() < 1e-8) dir.randomDirection();
+    this.target = this.up.clone().addScaledVector(dir.normalize(), 0.3).normalize();
+    this.idle = 0;
+  }
+
   private pickTarget(): void {
     const t = new THREE.Vector3().randomDirection();
     t.sub(this.up).multiplyScalar(0.25 + Math.random() * 0.45).add(this.up).normalize();
@@ -232,7 +253,8 @@ export class Pet {
   update(dt: number, time: number): void {
     const hungry = this.data.food < 25;
     this.moving = false;
-    if (this.evolving || this.selected || this.sleeping) {
+    if (this.goal && !this.evolving && !this.sleeping) this.target = this.goal;
+    if (this.evolving || ((this.selected || this.sleeping) && !this.goal)) {
       this.target = null;
     } else if (this.target) {
       const toT = tmpV.copy(this.target).addScaledVector(this.up, -this.up.dot(this.target));

@@ -1,6 +1,18 @@
 export type Species = 'mochi' | 'puff' | 'bloop' | 'sprout';
 export type Vec3 = [number, number, number];
 
+/** Inherited appearance for babies: body color plus the head feature of (possibly) another species. */
+export interface Look {
+  color: string;
+  feature: Species;
+  spots?: string;
+}
+
+export interface Wear {
+  head?: string;
+  neck?: string;
+}
+
 export interface PetData {
   id: string;
   name: string;
@@ -10,12 +22,36 @@ export interface PetData {
   joy: number;
   care: number;
   pos: Vec3;
+  look?: Look;
+  wear?: Wear;
+  parents?: [string, string];
 }
 
-export interface SaveData {
+export interface EggData {
+  id: string;
+  pos: Vec3;
+  hatchAt: number;
+  baby: Pick<PetData, 'name' | 'species' | 'look' | 'parents'>;
+}
+
+export interface Game {
+  pets: PetData[];
+  eggs: EggData[];
+  snacks: number;
+  /** Lifetime care given across all pets; unlocks accessories. */
+  totalCare: number;
+  lastEggAt: number;
+}
+
+interface SaveV1 {
   version: 1;
   savedAt: number;
   pets: PetData[];
+}
+
+export interface SaveData extends Game {
+  version: 2;
+  savedAt: number;
 }
 
 const KEY = 'pocket-pet-planet:v1';
@@ -88,7 +124,7 @@ export function makePet(species: Species, usedNames: string[], rng = Math.random
   };
 }
 
-export function defaultSave(): SaveData {
+export function defaultSave(): Game {
   const pets: PetData[] = [];
   for (const s of ['mochi', 'puff', 'bloop', 'sprout'] as Species[]) {
     pets.push(makePet(s, pets.map((p) => p.name)));
@@ -100,7 +136,7 @@ export function defaultSave(): SaveData {
     const l = Math.hypot(...v);
     p.pos = [v[0] / l, v[1] / l, v[2] / l];
   });
-  return { version: 1, savedAt: Date.now(), pets };
+  return { pets, eggs: [], snacks: 0, totalCare: 0, lastEggAt: 0 };
 }
 
 function isPet(x: unknown): x is PetData {
@@ -110,15 +146,44 @@ function isPet(x: unknown): x is PetData {
     Array.isArray(p.pos) && p.pos.length === 3;
 }
 
-export function load(now = Date.now()): { data: SaveData; offlineMs: number; fresh: boolean } {
+const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+
+/** Accepts v1 saves (pets only) and v2 saves, always returning a complete v2 game. */
+export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number }) | null {
+  if (!parsed || !Array.isArray(parsed.pets) || !parsed.pets.every(isPet) || parsed.pets.length === 0) return null;
+  if (parsed.version === 1) {
+    return {
+      savedAt: num(parsed.savedAt, Date.now()),
+      pets: parsed.pets,
+      eggs: [],
+      snacks: 0,
+      totalCare: parsed.pets.reduce((s, p) => s + p.care, 0),
+      lastEggAt: 0,
+    };
+  }
+  if (parsed.version === 2) {
+    return {
+      savedAt: num(parsed.savedAt, Date.now()),
+      pets: parsed.pets,
+      eggs: Array.isArray(parsed.eggs) ? parsed.eggs.filter((e) => e && Array.isArray(e.pos) && typeof e.hatchAt === 'number' && e.baby) : [],
+      snacks: num(parsed.snacks, 0),
+      totalCare: num(parsed.totalCare, 0),
+      lastEggAt: num(parsed.lastEggAt, 0),
+    };
+  }
+  return null;
+}
+
+export function load(now = Date.now()): { data: Game; offlineMs: number; fresh: boolean } {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as SaveData;
-      if (parsed?.version === 1 && Array.isArray(parsed.pets) && parsed.pets.every(isPet) && parsed.pets.length > 0) {
-        const offlineMs = Math.min(MAX_OFFLINE_MS, Math.max(0, now - parsed.savedAt));
-        parsed.pets.forEach((p) => decay(p, offlineMs));
-        return { data: parsed, offlineMs, fresh: false };
+      const game = migrate(JSON.parse(raw));
+      if (game) {
+        const offlineMs = Math.min(MAX_OFFLINE_MS, Math.max(0, now - game.savedAt));
+        game.pets.forEach((p) => decay(p, offlineMs));
+        const { savedAt: _, ...data } = game;
+        return { data, offlineMs, fresh: false };
       }
     }
   } catch {
@@ -127,8 +192,8 @@ export function load(now = Date.now()): { data: SaveData; offlineMs: number; fre
   return { data: defaultSave(), offlineMs: 0, fresh: true };
 }
 
-export function save(pets: PetData[], now = Date.now()): void {
-  const data: SaveData = { version: 1, savedAt: now, pets };
+export function save(game: Game, now = Date.now()): void {
+  const data: SaveData = { version: 2, savedAt: now, ...game };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {

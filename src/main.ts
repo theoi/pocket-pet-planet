@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
-import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE } from './state';
+import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
+import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
 import { buildWorld } from './world';
 
@@ -49,13 +50,23 @@ const wake = (pet: Pet) => awakeUntil.set(pet, performance.now() + 45_000);
 
 // --- state ---------------------------------------------------------------
 const loaded = load();
-const pets = loaded.data.pets.map((d) => new Pet(d));
+const game = loaded.data;
+const pets = game.pets.map((d) => new Pet(d));
 for (const p of pets) scene.add(p.group);
+const eggs = game.eggs.map((d) => new Egg(d));
+for (const e of eggs) scene.add(e.group);
 let selected: Pet | null = null;
 let resetting = false;
 
 const persist = () => {
-  if (!resetting) save(pets.map((p) => p.data));
+  if (resetting) return;
+  game.pets = pets.map((p) => p.data);
+  game.eggs = eggs.map((e) => e.data);
+  save(game);
+};
+const addCare = (d: PetData, amount: number) => {
+  d.care += amount;
+  game.totalCare += amount;
 };
 persist();
 setInterval(persist, 3000);
@@ -79,11 +90,15 @@ const facesCamera = (pet: Pet) => pet.up.dot(camera.position) > 2.1;
 
 function floater(pet: Pet, text: string) {
   const s = toScreen(pet.headWorld());
+  floatAt(s.x, s.y, text);
+}
+
+function floatAt(x: number, y: number, text: string) {
   const el = document.createElement('div');
   el.className = 'floater';
   el.textContent = text;
-  el.style.left = `${s.x}px`;
-  el.style.top = `${s.y}px`;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
   floaters.appendChild(el);
   setTimeout(() => el.remove(), 1500);
 }
@@ -94,6 +109,9 @@ function refreshPanel() {
   const mood = selected.sleeping ? { label: 'Sleeping', emoji: '😴' } : moodOf(d);
   $('petName').textContent = d.name;
   $('petForm').textContent = formName(d);
+  const fam = $('petFamily');
+  fam.classList.toggle('hidden', !d.parents);
+  if (d.parents) fam.textContent = `Child of ${d.parents[0]} & ${d.parents[1]}`;
   $('moodEmoji').textContent = mood.emoji;
   $('moodLabel').textContent = mood.label;
   $('foodBar').style.width = `${d.food.toFixed(1)}%`;
@@ -154,7 +172,7 @@ function feed(pet: Pet) {
   wake(pet);
   d.food = Math.min(100, d.food + 30);
   d.joy = Math.min(100, d.joy + 8);
-  d.care += 1;
+  addCare(d, 1);
   persist();
   fx.berry(
     () => pet.headWorld().addScaledVector(pet.up, -pet.size * 0.4),
@@ -177,7 +195,7 @@ function cuddle(pet: Pet) {
   wake(pet);
   d.joy = Math.min(100, d.joy + 12);
   const now = performance.now();
-  if (now - (lastPetAt.get(pet) ?? 0) > 3000) d.care += 0.25;
+  if (now - (lastPetAt.get(pet) ?? 0) > 3000) addCare(d, 0.25);
   lastPetAt.set(pet, now);
   pet.react('pet');
   fx.hearts(pet.headWorld(), pet.up, 4);
@@ -218,6 +236,106 @@ if (loaded.offlineMs > 10 * 60_000) {
   setTimeout(() => (hint.textContent = 'Drag to spin · Scroll or pinch to zoom · Tap a critter'), 7000);
 }
 
+// --- babies --------------------------------------------------------------
+let courtship: { a: Pet; b: Pet; started: number } | null = null;
+const canBreed = (p: Pet) =>
+  !p.sleeping && !p.evolving && p.data.joy >= BREED_JOY && p.data.food >= BREED_FOOD;
+const population = () => pets.length + eggs.length;
+
+function endCourtship() {
+  if (!courtship) return;
+  courtship.a.goal = courtship.b.goal = null;
+  courtship.a.facing = courtship.b.facing = null;
+  courtship = null;
+}
+
+function startCourtship(a: Pet, b: Pet) {
+  courtship = { a, b, started: performance.now() };
+  fx.hearts(a.headWorld(), a.up, 3);
+  fx.hearts(b.headWorld(), b.up, 3);
+  const mid = a.up.clone().add(b.up).normalize();
+  for (const [p, q] of [[a, b], [b, a]] as const) {
+    const away = p.up.clone().addScaledVector(mid, -p.up.dot(mid));
+    if (away.lengthSq() < 1e-6) away.copy(q.forward).negate();
+    p.goal = mid.clone().addScaledVector(away.normalize(), 0.13).normalize();
+  }
+}
+
+function breedTick() {
+  if (courtship) {
+    const { a, b, started } = courtship;
+    if (!pets.includes(a) || !pets.includes(b) || a.sleeping || b.sleeping || performance.now() - started > 60_000) {
+      endCourtship();
+      return;
+    }
+    if (a.up.angleTo(a.goal!) < 0.05 && b.up.angleTo(b.goal!) < 0.05) layEgg(a, b);
+    return;
+  }
+  if (population() >= POPULATION_CAP || Date.now() - game.lastEggAt < EGG_COOLDOWN_MS) return;
+  const ready = pets.filter(canBreed);
+  let best: [Pet, Pet] | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < ready.length; i++)
+    for (let j = i + 1; j < ready.length; j++) {
+      const d = ready[i].up.angleTo(ready[j].up);
+      if (d < bestD) [bestD, best] = [d, [ready[i], ready[j]]];
+    }
+  if (best) startCourtship(...best);
+}
+
+function layEgg(a: Pet, b: Pet) {
+  const mid = a.up.clone().add(b.up).normalize();
+  const used = [...pets.map((p) => p.data.name), ...eggs.map((e) => e.data.baby.name)];
+  const egg = new Egg({
+    id: Math.floor(Math.random() * 1e9).toString(36) + Date.now().toString(36).slice(-4),
+    pos: [mid.x, mid.y, mid.z],
+    hatchAt: Date.now() + EGG_HATCH_MS,
+    baby: makeBaby(a.data, b.data, used),
+  });
+  eggs.push(egg);
+  scene.add(egg.group);
+  game.lastEggAt = Date.now();
+  a.react('pet');
+  b.react('pet');
+  endCourtship();
+  a.stepAway(mid);
+  b.stepAway(mid);
+  fx.hearts(egg.group.position.clone().addScaledVector(mid, 0.25), mid, 8);
+  const s = toScreen(egg.group.position.clone().addScaledVector(mid, 0.4));
+  floatAt(s.x, s.y, '💞 An egg!');
+  persist();
+}
+
+function hatch(egg: Egg) {
+  eggs.splice(eggs.indexOf(egg), 1);
+  scene.remove(egg.group);
+  const d: PetData = {
+    id: egg.data.id,
+    ...egg.data.baby,
+    stage: 0,
+    food: 70,
+    joy: 80,
+    care: 0,
+    pos: egg.data.pos,
+  };
+  const pet = new Pet(d);
+  pets.push(pet);
+  scene.add(pet.group);
+  pet.react('feed');
+  fx.sparkles(pet.centerWorld(), pet.up, 30, 0.7);
+  fx.hearts(pet.headWorld(), pet.up, 5);
+  floater(pet, `🐣 Meet ${d.name}!`);
+  persist();
+}
+
+function pokeEgg(egg: Egg) {
+  egg.poke();
+  const left = Math.max(0, egg.data.hatchAt - Date.now());
+  const m = Math.floor(left / 60_000), s = Math.floor((left % 60_000) / 1000);
+  const p = toScreen(egg.group.position.clone().addScaledVector(egg.up, 0.35));
+  floatAt(p.x, p.y, left > 0 ? `🥚 Hatching in ${m}:${String(s).padStart(2, '0')}` : '🥚 Any moment!');
+}
+
 // --- picking -------------------------------------------------------------
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
@@ -232,10 +350,15 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (moved > 8) return;
   ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit)], false);
+  const hits = raycaster.intersectObjects([world.planet, ...pets.map((p) => p.hit), ...eggs.map((e) => e.hit)], false);
   const first = hits[0];
   const pet = first?.object.userData.pet as Pet | undefined;
-  if (pet) {
+  // Eggs are small and usually sit right next to their parents' generous hit spheres, so they win ties.
+  const planetIdx = hits.findIndex((h) => h.object === world.planet);
+  const egg = hits.slice(0, planetIdx < 0 ? undefined : planetIdx).find((h) => h.object.userData.egg)?.object.userData.egg as Egg | undefined;
+  if (egg) {
+    pokeEgg(egg);
+  } else if (pet) {
     select(pet);
     cuddleOnTapAgain(pet);
   } else if (first) {
@@ -252,6 +375,8 @@ function cuddleOnTapAgain(pet: Pet) {
 // --- debug ---------------------------------------------------------------
 function fastForward(hours: number) {
   for (const p of pets) decay(p.data, hours * HOUR);
+  for (const e of eggs) e.data.hatchAt -= hours * HOUR;
+  game.lastEggAt -= hours * HOUR;
   persist();
   refreshPanel();
 }
@@ -261,10 +386,27 @@ function debugEvolve() {
   pet.data.care = Math.max(pet.data.care, STAGE_CARE[pet.data.stage]);
   checkEvolve(pet);
 }
+/** Make the selected pet and its nearest awake neighbour happy, put them side by side, and let courtship run. */
+function debugBreed() {
+  const a = selected ?? pets[0];
+  const b = pets.filter((p) => p !== a).sort((x, y) => x.up.angleTo(a.up) - y.up.angleTo(a.up))[0];
+  if (!b) return;
+  for (const p of [a, b]) {
+    p.data.joy = 95;
+    p.data.food = 85;
+    awakeUntil.set(p, performance.now() + 120_000);
+  }
+  b.up.copy(a.up).addScaledVector(a.forward, 0.25).normalize();
+  game.lastEggAt = 0;
+  endCourtship();
+  select(null);
+  breedTick();
+}
 if (debugMode) {
   $('debug').classList.remove('hidden');
   $('dbgFF').addEventListener('click', () => fastForward(4));
   $('dbgEvolve').addEventListener('click', debugEvolve);
+  $('dbgBreed').addEventListener('click', debugBreed);
   $('dbgReset').addEventListener('click', () => {
     resetting = true;
     clearSave();
@@ -285,6 +427,8 @@ window.__ppp = {
       pos: [...p.data.pos],
       moving: p.moving,
       sleeping: p.sleeping,
+      look: p.data.look,
+      parents: p.data.parents,
       evolving: p.evolving,
       visible: facesCamera(p),
       screen: toScreen(p.centerWorld()),
@@ -292,6 +436,17 @@ window.__ppp = {
   camera: () => camera.position.toArray(),
   sky: () => ({ hour: dayNight.hour, night: dayNight.night, fireflies: dayNight.fireflyOpacity }),
   selected: () => selected?.data.id ?? null,
+  /** Point the camera at a pet or egg by id (tests and screenshots). */
+  focus: (id: string, distance = 6.2) => {
+    const up = pets.find((p) => p.data.id === id)?.up ?? eggs.find((e) => e.data.id === id)?.up;
+    if (!up) return;
+    // Look from slightly "south" of the target so creatures are seen from the front-ish, not top-down.
+    const south = new THREE.Vector3(0, -1, 0).addScaledVector(up, up.y);
+    if (south.lengthSq() < 1e-6) south.set(0, 0, 1);
+    camera.position.copy(up).addScaledVector(south.normalize(), -0.22).normalize().multiplyScalar(distance);
+  },
+  eggs: () => eggs.map((e) => ({ ...e.data, screen: toScreen(e.group.position) })),
+  game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve } : {}),
 };
 
@@ -305,6 +460,7 @@ window.addEventListener('resize', () => {
 const clock = new THREE.Clock();
 let panelTimer = 0;
 let twinkleTimer = 0;
+let breedTimer = 2;
 const tagPos = new THREE.Vector3();
 const clockEl = $('clock');
 // Weak GPUs (and software rendering) get a lower pixel ratio rather than a sluggish planet.
@@ -333,8 +489,19 @@ renderer.setAnimationLoop(() => {
   for (const p of pets) {
     decay(p.data, dt * 1000);
     p.sleeping = dayNight.night > 0.6 && !p.evolving && now > (awakeUntil.get(p) ?? 0);
-    p.facing = p === selected ? camera.position : null;
+    const partner = courtship?.a === p ? courtship.b : courtship?.b === p ? courtship.a : null;
+    p.facing = p === selected ? camera.position : partner ? partner.group.position : null;
     p.update(dt, t);
+  }
+  const wall = Date.now();
+  for (const e of [...eggs]) {
+    e.update(dt, t, wall);
+    if (wall >= e.data.hatchAt) hatch(e);
+  }
+  breedTimer -= dt;
+  if (breedTimer <= 0) {
+    breedTimer = 1.5;
+    breedTick();
   }
   twinkleTimer -= dt;
   if (twinkleTimer <= 0) {
