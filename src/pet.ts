@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildAccessory } from './accessories';
 import { moodOf, SPECIES, type Mood, type PetData } from './state';
-import { toon } from './toon';
+import { disposeMerged, mergeByMaterial, toon } from './toon';
 import { R } from './world';
 
 const BASE = 0.21;
@@ -106,6 +106,7 @@ export class Pet {
     const dark = '#' + new THREE.Color(color).offsetHSL(0, 0.05, -0.08).getHexString();
     const darkMat = toon(dark);
     const accentMat = toon(SPECIES[feat].accent);
+    disposeMerged(this.body);
     this.body.clear();
     this.eyes = [];
     this.wings = [];
@@ -117,6 +118,7 @@ export class Pet {
     for (const s of [-1, 1]) {
       const eye = new THREE.Group();
       eye.position.set(0.36 * s, 1.14, 0.84);
+      eye.userData.keep = true; // blinks
       eye.add(mesh(smallSphere, inkMat, [0, 0, 0], [0.13, 0.15, 0.1]));
       eye.add(mesh(smallSphere, whiteMat, [0.04, 0.05, 0.07], [0.045, 0.045, 0.03]));
       b.add(eye);
@@ -182,6 +184,7 @@ export class Pet {
       for (const s of [-1, 1]) {
         const wing = new THREE.Group();
         wing.position.set(0.55 * s, 1.25, -0.55);
+        wing.userData.keep = true; // flaps
         wing.add(mesh(wingGeo, wingMat, [0.4 * s, 0.15, 0], [0.5, 0.32, 0.08], [0, 0.5 * s, 0.35 * s]));
         b.add(wing);
         this.wings.push(wing);
@@ -194,6 +197,8 @@ export class Pet {
       if (acc) b.add(acc);
     }
     this.group.userData.top = top;
+    // Everything except blinking eyes and flapping wings is static relative to the body: bake it into a few meshes.
+    mergeByMaterial(b);
     this.updateFace();
     this.place();
   }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Season } from './seasons';
 import { canvasTexture, mulberry32 } from './toon';
 import { R, type Cloud, type World } from './world';
 
@@ -15,11 +16,12 @@ const RAINBOW_MS = 90_000;
 export const BLOOM_DEFAULT = 0.35;
 
 /** Weather for an 8-minute slice of real time; seeded so a reload mid-shower keeps the shower. */
-export function scheduledKind(segment: number, night: number): WeatherKind {
+export function scheduledKind(segment: number, night: number, season: Season = 'autumn'): WeatherKind {
   const r = mulberry32(segment * 7919 + 13)();
-  const snow = 0.1 + night * 0.1;
-  if (r < 0.25) return 'rain';
-  if (r < 0.25 + snow) return 'snow';
+  // Winter is the snowy season; rain is rarer then. Snow never falls in summer.
+  const [rain, snow] = { spring: [0.3, 0], summer: [0.15, 0], autumn: [0.3, 0.03], winter: [0.06, 0.4 + night * 0.1] }[season];
+  if (r < rain) return 'rain';
+  if (r < rain + snow) return 'snow';
   return 'clear';
 }
 
@@ -196,7 +198,7 @@ export class Weather {
       if (seg !== this.segment) {
         const first = this.segment < 0;
         this.segment = seg;
-        const next = scheduledKind(seg, night);
+        const next = scheduledKind(seg, night, this.world.season);
         if (first) {
           this.kind = next;
           this.rain = next === 'rain' ? 1 : 0;

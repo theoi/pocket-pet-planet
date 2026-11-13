@@ -4,7 +4,8 @@ import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
 import { Sound } from './audio';
-import { accessoryById, ACCESSORIES, unlockedAt } from './accessories';
+import { accessoryById, ACCESSORIES, giftsFor, isAvailable, isSeasonal, unlockedAt } from './accessories';
+import { SeasonFX } from './seasonfx';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
 import { SAVE_KEY, clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
@@ -13,6 +14,7 @@ import { FruitCatch } from './minigame';
 import { DEX, dexEntry, entriesFor, formatWhen, regionName, sticker } from './dex';
 import { parseWeatherOverride, Weather } from './weather';
 import { buildWorld } from './world';
+import { FESTIVALS, festivalOf, fmtRange, parseDateOverride, SEASONS, seasonOf } from './seasons';
 
 const HOUR = 3600_000;
 const debugMode = new URLSearchParams(location.search).has('debug');
@@ -60,8 +62,13 @@ controls.minDistance = 3.4;
 controls.maxDistance = 13;
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
-const world = buildWorld(scene);
+const calendarOverride = parseDateOverride();
+const today = () => calendarOverride ?? new Date();
+const season = seasonOf(today());
+const festival = festivalOf(today());
+const world = buildWorld(scene, season);
 const fx = new FX(scene);
+const seasonFx = new SeasonFX(scene, world, season, festival);
 const timeOverride = parseTimeOverride();
 const dayNight = new DayNight(scene, hemi, sun, timeOverride, world.halo);
 const awakeUntil = new WeakMap<Pet, number>();
@@ -121,16 +128,21 @@ function renderWardrobe() {
   const box = document.getElementById('wardrobeItems')!;
   if (!selected || document.getElementById('wardrobe')!.classList.contains('hidden')) return;
   const wear = selected.data.wear ?? {};
+  const owned = game.outfits ?? [];
+  // Seasonal gifts you own come first; ones from other seasons show as locked teasers at the end.
+  const order = [...ACCESSORIES.filter((a) => isSeasonal(a) && owned.includes(a.id)), ...ACCESSORIES.filter((a) => !isSeasonal(a)), ...ACCESSORIES.filter((a) => isSeasonal(a) && !owned.includes(a.id))];
   box.replaceChildren(
-    ...ACCESSORIES.map((a) => {
+    ...order.map((a) => {
       const b = document.createElement('button');
-      const unlocked = game.totalCare >= a.unlock;
+      const unlocked = isAvailable(a, game.totalCare, owned);
+      const when = a.season ? SEASONS[a.season].name : a.festival ? FESTIVALS.find((f) => f.id === a.festival)!.name : '';
       const on = wear[a.slot] === a.id;
       b.className = 'chip' + (on ? ' on' : '');
       b.dataset.id = a.id;
       b.disabled = !unlocked;
-      b.title = unlocked ? a.name : `Unlocks at ${a.unlock} care`;
-      b.innerHTML = `<span class="e">${unlocked ? a.emoji : '🔒'}</span><span>${unlocked ? a.name : `${a.unlock} care`}</span>`;
+      if (isSeasonal(a)) b.classList.add('seasonal');
+      b.title = unlocked ? a.name : when ? `A gift during ${when}` : `Unlocks at ${a.unlock} care`;
+      b.innerHTML = `<span class="e">${unlocked ? a.emoji : '🔒'}</span><span>${unlocked ? a.name : when || `${a.unlock} care`}</span>`;
       b.addEventListener('click', () => toggleWear(a.id));
       return b;
     }),
@@ -141,7 +153,7 @@ function renderWardrobe() {
 
 function toggleWear(id: string) {
   const a = accessoryById(id);
-  if (!selected || !a || game.totalCare < a.unlock) return;
+  if (!selected || !a || !isAvailable(a, game.totalCare, game.outfits ?? [])) return;
   const d = selected.data;
   d.wear = { ...d.wear };
   if (d.wear[a.slot] === id) delete d.wear[a.slot];
@@ -245,6 +257,24 @@ window.addEventListener('keydown', (e) => {
 // A brand-new planet's starters are simply "found"; an older save's pets are "recorded" retroactively.
 scanDex(loaded.fresh ? 'quiet' : Object.keys(dex).length === 0 ? 'backfill' : 'loud');
 updateDexCount();
+
+// --- seasons & festivals -------------------------------------------------
+{
+  game.outfits ??= [];
+  const gifts = giftsFor(season, festival?.id).filter((a) => !game.outfits!.includes(a.id));
+  game.outfits.push(...gifts.map((a) => a.id));
+  const badge = $('seasonBadge');
+  badge.textContent = festival ? `${festival.emoji} ${festival.name}` : `${SEASONS[season].emoji} ${SEASONS[season].name}`;
+  badge.title = festival ? `${festival.blurb} (${fmtRange(festival)})` : SEASONS[season].name;
+  badge.addEventListener('click', () =>
+    toast(festival ? `${festival.emoji} ${festival.name}: ${festival.blurb}! (${fmtRange(festival)})` : `${SEASONS[season].emoji} It's ${SEASONS[season].name.toLowerCase()} on the planet`),
+  );
+  const parts: string[] = [];
+  if (festival) parts.push(`${festival.emoji} ${festival.name} is on!`);
+  if (gifts.length) parts.push(`Gift${gifts.length > 1 ? 's' : ''}: ${gifts.map((a) => `${a.emoji} ${a.name}`).join(', ')}`);
+  if (parts.length) setTimeout(() => toast(parts.join(' · ')), 900);
+  if (gifts.length) persist();
+}
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') persist();
@@ -716,9 +746,17 @@ window.__ppp = {
   __sound: sound,
   saving: () => !resetting,
   dex: () => ({ ...dex }),
+  season: () => ({ season, festival: festival?.id ?? null, decor: seasonFx.decor, props: world.props.map((p) => p.kind), outfits: [...(game.outfits ?? [])] }),
+  perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, objects: countObjects() }),
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve, setWeather: (k: Parameters<Weather['set']>[0]) => weather.set(k, dayNight.night) } : {}),
 };
+
+function countObjects(): number {
+  let n = 0;
+  scene.traverseVisible(() => n++);
+  return n;
+}
 
 // --- loop ----------------------------------------------------------------
 window.addEventListener('resize', () => {
@@ -807,6 +845,7 @@ renderer.setAnimationLoop(() => {
     clockEl.textContent = `${weather.emoji ? weather.emoji + ' ' : ''}${dayNight.night > 0.5 ? '🌙' : dayNight.night > 0.05 ? '🌇' : '☀️'} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   }
   fx.update(dt);
+  seasonFx.tick(dt, t, dayNight.night);
   world.update(dt);
   controls.update();
 

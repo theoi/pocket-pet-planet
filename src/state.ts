@@ -43,6 +43,8 @@ export interface Game {
   lastEggAt: number;
   /** Per-flower bloom (0 bud … 1 open), indexed like the planet's flowers. */
   flowers?: number[];
+  /** Seasonal and festival outfits the player has been gifted (kept forever). */
+  outfits?: string[];
   /** Collect-a-dex: entry id → when/where/who first discovered it. */
   dex?: Record<string, { at: number; by: string; where: string; backfilled?: boolean }>;
 }
@@ -189,6 +191,7 @@ export function migrate(parsed: SaveV1 | SaveV2 | SaveData): (Game & { savedAt: 
       lastEggAt: num(parsed.lastEggAt, 0),
       flowers: Array.isArray(parsed.flowers) ? parsed.flowers.map((x) => num(x, 0.35)) : undefined,
       dex,
+      outfits: Array.isArray((parsed as SaveData).outfits) ? (parsed as SaveData).outfits!.filter((x) => typeof x === 'string') : undefined,
     };
   }
   return null;

@@ -127,6 +127,7 @@ test('enough care evolves a creature (debug fast-forward)', async ({ page }) => 
 
   // Overfeeding is refused and gives no care.
   const care = (await pets(page)).find((p) => p.id === pet.id)!.care;
+  await expect.poll(async () => (await pets(page)).find((p) => p.id === pet.id)!.evolving, { timeout: 20_000 }).toBe(false);
   // Feed until full; once full, further feeding gives no care.
   for (let i = 0; i < 4; i++) await page.click('#feedBtn');
   await expect(page.locator('.floater', { hasText: 'Too full!' }).first()).toBeVisible();

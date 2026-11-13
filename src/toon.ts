@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let gradient: THREE.DataTexture | null = null;
 
@@ -53,4 +54,48 @@ export function canvasTexture(draw: (ctx: CanvasRenderingContext2D, s: number) =
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/**
+ * Bakes every mesh under `root` (except direct children flagged `userData.keep`) into one mesh per material,
+ * in root-local space. Static decorations become a handful of draw calls instead of hundreds.
+ */
+export function mergeByMaterial(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert();
+  const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const m = new THREE.Matrix4();
+  const visit = (o: THREE.Object3D, top: boolean) => {
+    for (const c of o.children) {
+      if (top && c.userData.keep) continue;
+      if (c instanceof THREE.Mesh && !Array.isArray(c.material) && c.visible) {
+        const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        g.applyMatrix4(m.multiplyMatrices(inv, c.matrixWorld));
+        const list = buckets.get(c.material) ?? [];
+        list.push(g);
+        buckets.set(c.material, list);
+      }
+      visit(c, false);
+    }
+  };
+  visit(root, true);
+  const kept = root.children.filter((c) => c.userData.keep);
+  root.clear();
+  for (const k of kept) root.add(k);
+  for (const [mat, geos] of buckets) {
+    const merged = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.userData.merged = true;
+    root.add(mesh);
+  }
+}
+
+/** Free geometries created by mergeByMaterial under `root`. */
+export function disposeMerged(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    if (o.userData.merged && o instanceof THREE.Mesh) o.geometry.dispose();
+  });
 }

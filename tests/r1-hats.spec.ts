@@ -69,7 +69,8 @@ test('a fully dressed planet (all outfits unlocked)', async ({ page }) => {
 
   await selectVisiblePet(page);
   await page.click('#wearBtn');
-  await expect(page.locator('.chip:disabled')).toHaveCount(0);
+  // All care outfits are unlocked; only other seasons' gifts remain as locked teasers.
+  await expect(page.locator('.chip:not(.seasonal):disabled')).toHaveCount(0);
   await expect(page.locator('#wardrobeNote')).toContainText('everything unlocked');
   await page.click('.chip[data-id="beanie"]');
   await page.waitForTimeout(600);

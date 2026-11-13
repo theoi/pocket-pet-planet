@@ -1,0 +1,10 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: 900, height: 700 } });
+await p.goto('http://127.0.0.1:4173/pocket-pet-planet/?time=12:00&weather=clear&date=2026-07-10');
+await p.waitForFunction(() => window.__ppp?.ready);
+const n = await p.evaluate(() => window.__ppp.flowerNormals()[3]);
+await p.evaluate((n) => window.__ppp.focus(n, 3.4), n);
+await p.waitForTimeout(1500);
+await p.screenshot({ path: 'shots/flower-close.png' });
+await b.close();
