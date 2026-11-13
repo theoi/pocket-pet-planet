@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6d6e8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23bfe9c9'/><circle cx='38' cy='45' r='6' fill='%233d3047'/><circle cx='62' cy='45' r='6' fill='%233d3047'/></svg>" />
+    <title>Pocket Pet Planet</title>
+    <script type="module" crossorigin src="/pocket-pet-planet/assets/index-h8-PUyyT.js"></script>
+    <link rel="stylesheet" crossorigin href="/pocket-pet-planet/assets/index-Dayx0wht.css">
+  </head>
+  <body>
+    <div id="app"></div>
+    <header class="title">
+      <h1>Pocket Pet Planet</h1>
+      <p id="hint">Drag to spin · Scroll or pinch to zoom · Tap a critter</p>
+    </header>
+    <div id="tag" class="tag hidden"></div>
+    <div id="floaters"></div>
+    <div id="toast" class="toast hidden"></div>
+    <div id="staleBanner" class="stale hidden" role="status">
+      Your planet was opened in another tab, so this one has stopped saving.
+      <button id="staleReload" class="btn small">Continue here</button>
+    </div>
+    <div class="hud-top">
+    <div id="topbar" class="topbar">
+      <span id="snacks" class="pill" title="Snacks from Fruit Catch">🍓 <b id="snackCount">0</b></span>
+      <button id="dexBtn" class="pill play" aria-label="Sticker book">📖 <b id="dexCount">0</b></button>
+      <button id="diaryBtn" class="pill play" aria-label="Diary">📔<i id="diaryDot" class="dot hidden"></i></button>
+      <button id="decoBtn" class="pill play" aria-pressed="false">🏡 <span class="lbl">Decorate</span></button>
+      <button id="photoBtn" class="pill play" aria-label="Photo booth">📷</button>
+      <button id="playBtn" class="pill play">🎮 <span class="lbl">Fruit Catch</span></button>
+      <button id="muteBtn" class="pill play" aria-label="Sound on" aria-pressed="false">🔊</button>
+    </div>
+    <div class="hud-right">
+      <div id="clock" class="clock"></div>
+      <button id="seasonBadge" class="season-badge"></button>
+    </div>
+    </div>
+    <section id="decoTray" class="deco-tray hidden" aria-label="Decorate">
+      <div id="decoHint" class="deco-hint">Pick something, then tap the planet to place it.</div>
+      <div id="decoItems" class="deco-items"></div>
+      <div id="decoSel" class="deco-sel hidden">
+        <button id="decoRotate" class="btn small">↻ Turn</button>
+        <button id="decoRemove" class="btn small">🗑 Remove</button>
+      </div>
+      <button id="decoDone" class="btn small deco-done">✓ Done</button>
+    </section>
+    <section id="booth" class="booth hidden" aria-label="Photo booth">
+      <div class="booth-head">
+        <b>📷 Photo booth</b>
+        <button id="boothClose" class="close" aria-label="Close photo booth">×</button>
+      </div>
+      <div id="boothWrap" class="booth-wrap">
+        <div id="boothStage" class="booth-stage">
+          <canvas id="boothCanvas"></canvas>
+          <div id="boothStickers" class="booth-stickers"></div>
+        </div>
+      </div>
+      <div class="booth-tools">
+        <div id="boothFrames" class="booth-row"></div>
+        <div id="boothPalette" class="booth-row"></div>
+        <div id="boothSel" class="booth-row booth-sel hidden">
+          <button id="stSmaller" class="btn small" aria-label="Smaller">−</button>
+          <button id="stBigger" class="btn small" aria-label="Bigger">+</button>
+          <button id="stTurn" class="btn small" aria-label="Turn">↻</button>
+          <button id="stRemove" class="btn small" aria-label="Remove sticker">🗑</button>
+        </div>
+        <button id="boothSave" class="btn booth-save">💾 Save postcard</button>
+      </div>
+      <div id="boothResult" class="booth-result hidden">
+        <img id="boothImg" alt="Your postcard" />
+        <p id="boothMsg"></p>
+        <button id="boothResultClose" class="btn small">OK</button>
+      </div>
+    </section>    <section id="dex" class="dex hidden" aria-label="Sticker book">
+      <div class="dex-card">
+        <button id="dexClose" class="close" aria-label="Close sticker book">×</button>
+        <h2>📖 Sticker Book</h2>
+        <div class="dex-progress"><div class="track"><div id="dexBar" class="fill care"></div></div><span id="dexProgress"></span></div>
+        <h3>Critters &amp; forms</h3>
+        <div id="dexForms" class="dex-grid"></div>
+        <h3>Baby mixes</h3>
+        <div id="dexMixes" class="dex-grid"></div>
+        <h3>Special guests</h3>
+        <div id="dexGuests" class="dex-grid"></div>
+      </div>
+    </section>
+    <section id="plotCard" class="panel plot-card hidden" aria-label="Garden plot">
+      <button id="plotClose" class="close" aria-label="Close">×</button>
+      <div class="pet-name" id="plotTitle">🌱 Garden plot</div>
+      <div class="mood-line"><b id="plotStage">Empty plot</b></div>
+      <div class="bar"><span>Growth</span><div class="track"><div id="plotBar" class="fill care"></div></div></div>
+      <div id="plotNote" class="care-note"></div>
+      <div id="plotSeeds" class="plot-seeds"></div>
+      <div class="row plot-actions">
+        <button id="plotWater" class="btn">💧 Water</button>
+        <button id="plotHarvest" class="btn">🧺 Harvest</button>
+      </div>
+      <div id="plotBag" class="care-note"></div>
+    </section>
+    <section id="shop" class="panel shop-card hidden" aria-label="Visitor shop">
+      <button id="shopClose" class="close" aria-label="Close">×</button>
+      <div class="pet-name">🌠 Twinkle's wares</div>
+      <div class="mood-line">"Treats for treasures! I'm off again at dawn." · You have <b id="shopSnacks">0</b> 🍓</div>
+      <div id="shopWares" class="wares"></div>
+    </section>
+    <section id="diary" class="dex hidden" aria-label="Diary">
+      <div class="dex-card diary-card">
+        <button id="diaryClose" class="close" aria-label="Close diary">×</button>
+        <h2>📔 Planet Diary</h2>
+        <div id="diaryCount" class="soft"></div>
+        <h3>Friendships</h3>
+        <div id="diaryPairs" class="pairs"></div>
+        <div id="diaryEntries" class="entries"></div>
+      </div>
+    </section>
+    <section id="game" class="game hidden">
+      <canvas id="gameCanvas"></canvas>
+      <div id="gameHud" class="game-hud"></div>
+      <button id="gameClose" class="close game-close" aria-label="Back to planet">×</button>
+      <div id="gameIntro" class="game-card">
+        <h2 id="gameTitle">Fruit Catch</h2>
+        <p>Slide left and right to catch falling fruit. Drag, tap, or use the arrow keys. ⭐ is worth 3, and every 5 in a row is a bonus!</p>
+        <p class="soft">30 seconds · every 3 points earn a snack 🍓 (up to 10)</p>
+        <button id="gameStart" class="btn">Start!</button>
+      </div>
+      <div id="gameEnd" class="game-card hidden">
+        <h2 id="gameResult">Nice!</h2>
+        <p id="gameScore" class="soft"></p>
+        <p id="gameReward" class="reward"></p>
+        <p class="soft">Give snacks as treats from a pet's panel.</p>
+        <div class="row">
+          <button id="gameAgain" class="btn">Play again</button>
+          <button id="gameDone" class="btn">Back to planet</button>
+        </div>
+      </div>
+    </section>
+    <section id="panel" class="panel hidden" aria-live="polite">
+      <button id="close" class="close" aria-label="Close">×</button>
+      <div class="row head">
+        <span id="moodEmoji" class="mood-emoji">😊</span>
+        <div class="names">
+          <div id="petName" class="pet-name">Mochi</div>
+          <div id="petForm" class="pet-form">Baby Mochi</div>
+          <div id="petFamily" class="pet-form hidden"></div>
+        </div>
+      </div>
+      <form id="renameForm" class="rename hidden">
+        <input id="renameInput" maxlength="16" autocomplete="off" aria-label="New name" />
+        <button type="submit" class="btn small">Save</button>
+      </form>
+      <div class="mood-line">Mood: <b id="moodLabel">Happy</b></div>
+      <div class="friends-line"><span class="lbl">Friends</span><div id="petFriends" class="friends"></div></div>
+      <div class="bar"><span>Tummy</span><div class="track"><div id="foodBar" class="fill food"></div></div></div>
+      <div class="bar"><span>Joy</span><div class="track"><div id="joyBar" class="fill joy"></div></div></div>
+      <div class="bar"><span>Care</span><div class="track"><div id="careBar" class="fill care"></div></div></div>
+      <div id="careNote" class="care-note"></div>
+      <div class="actions">
+        <button id="feedBtn" class="btn"><span class="e">🍎</span>Feed</button>
+        <button id="treatBtn" class="btn"><span class="e">🍓</span>Treat <span id="treatCount"></span></button>
+        <button id="petBtn" class="btn"><span class="e">💗</span>Pet</button>
+        <button id="wearBtn" class="btn"><span class="e">👒</span>Wear</button>
+        <button id="renameBtn" class="btn"><span class="e">✏️</span>Name</button>
+      </div>
+      <div id="wardrobe" class="wardrobe hidden">
+        <div id="wardrobeItems" class="wardrobe-items"></div>
+        <div id="wardrobeNote" class="care-note"></div>
+      </div>
+    </section>
+    <section id="debug" class="debug hidden">
+      <b>debug</b>
+      <button id="dbgFF">+4h</button>
+      <button id="dbgEvolve">evolve</button>
+      <button id="dbgBreed">breed</button>
+      <button id="dbgReset">reset</button>
+    </section>
+  </body>
+</html>
