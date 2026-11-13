@@ -128,6 +128,7 @@ function randomUnit(rng: () => number): THREE.Vector3 {
 
 export interface World {
   planet: THREE.Mesh;
+  halo: THREE.Sprite;
   update(dt: number): void;
 }
 
@@ -206,6 +207,7 @@ export function buildWorld(scene: THREE.Scene): World {
 
   return {
     planet,
+    halo,
     update(dt) {
       for (const c of clouds) c.pivot.rotateY(c.speed * dt);
     },

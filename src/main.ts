@@ -4,6 +4,7 @@ import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
 import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE } from './state';
+import { DayNight, parseTimeOverride } from './daynight';
 import { buildWorld } from './world';
 
 const HOUR = 3600_000;
@@ -23,7 +24,8 @@ scene.add(camera);
 const startDistance = () => (camera.aspect < 0.8 ? 10 : 7.4);
 camera.position.set(0, 0.55, 1).normalize().multiplyScalar(startDistance());
 
-scene.add(new THREE.HemisphereLight('#fff6fb', '#c9b3e6', 1.6));
+const hemi = new THREE.HemisphereLight('#fff6fb', '#c9b3e6', 1.6);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffffff', 1.5);
 sun.position.set(3, 4, 5);
 camera.add(sun); // light follows the camera so the side you look at is always sunny
@@ -40,6 +42,10 @@ controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
 const world = buildWorld(scene);
 const fx = new FX(scene);
+const timeOverride = parseTimeOverride();
+const dayNight = new DayNight(scene, hemi, sun, timeOverride, world.halo);
+const awakeUntil = new WeakMap<Pet, number>();
+const wake = (pet: Pet) => awakeUntil.set(pet, performance.now() + 45_000);
 
 // --- state ---------------------------------------------------------------
 const loaded = load();
@@ -85,7 +91,7 @@ function floater(pet: Pet, text: string) {
 function refreshPanel() {
   if (!selected) return;
   const d = selected.data;
-  const mood = moodOf(d);
+  const mood = selected.sleeping ? { label: 'Sleeping', emoji: '😴' } : moodOf(d);
   $('petName').textContent = d.name;
   $('petForm').textContent = formName(d);
   $('moodEmoji').textContent = mood.emoji;
@@ -145,6 +151,7 @@ function feed(pet: Pet) {
     floater(pet, 'Too full!');
     return;
   }
+  wake(pet);
   d.food = Math.min(100, d.food + 30);
   d.joy = Math.min(100, d.joy + 8);
   d.care += 1;
@@ -167,6 +174,7 @@ const lastPetAt = new WeakMap<Pet, number>();
 function cuddle(pet: Pet) {
   const d = pet.data;
   if (pet.evolving) return;
+  wake(pet);
   d.joy = Math.min(100, d.joy + 12);
   const now = performance.now();
   if (now - (lastPetAt.get(pet) ?? 0) > 3000) d.care += 0.25;
@@ -276,11 +284,13 @@ window.__ppp = {
       ...p.data,
       pos: [...p.data.pos],
       moving: p.moving,
+      sleeping: p.sleeping,
       evolving: p.evolving,
       visible: facesCamera(p),
       screen: toScreen(p.centerWorld()),
     })),
   camera: () => camera.position.toArray(),
+  sky: () => ({ hour: dayNight.hour, night: dayNight.night, fireflies: dayNight.fireflyOpacity }),
   selected: () => selected?.data.id ?? null,
   ...(debugMode ? { fastForward, evolve: debugEvolve } : {}),
 };
@@ -296,6 +306,7 @@ const clock = new THREE.Clock();
 let panelTimer = 0;
 let twinkleTimer = 0;
 const tagPos = new THREE.Vector3();
+const clockEl = $('clock');
 // Weak GPUs (and software rendering) get a lower pixel ratio rather than a sluggish planet.
 let perfFrames = 0;
 let perfTime = 0;
@@ -317,15 +328,23 @@ renderer.setAnimationLoop(() => {
   adaptQuality(raw);
   const dt = Math.min(0.1, raw);
   const t = clock.elapsedTime;
+  dayNight.tick(dt, t);
+  const now = performance.now();
   for (const p of pets) {
     decay(p.data, dt * 1000);
+    p.sleeping = dayNight.night > 0.6 && !p.evolving && now > (awakeUntil.get(p) ?? 0);
     p.facing = p === selected ? camera.position : null;
     p.update(dt, t);
   }
   twinkleTimer -= dt;
   if (twinkleTimer <= 0) {
     twinkleTimer = 0.25;
-    for (const p of pets) if (p.data.stage >= 2 && Math.random() < 0.4) fx.twinkle(p.headWorld(), p.up);
+    for (const p of pets) {
+      if (p.data.stage >= 2 && Math.random() < 0.4) fx.twinkle(p.headWorld(), p.up);
+      if (p.sleeping && Math.random() < 0.18) fx.zzz(p.headWorld(), p.up);
+    }
+    const hh = Math.floor(dayNight.hour), mm = Math.floor((dayNight.hour % 1) * 60);
+    clockEl.textContent = `${dayNight.night > 0.5 ? '🌙' : dayNight.night > 0.05 ? '🌇' : '☀️'} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   }
   fx.update(dt);
   world.update(dt);

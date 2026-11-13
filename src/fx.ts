@@ -59,6 +59,16 @@ export class FX {
   private drops: Drop[] = [];
   private heart = heartTex();
   private star = starTex();
+  private zTex = canvasTexture((ctx, s) => {
+    ctx.font = `bold ${s * 0.8}px ui-rounded, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = s * 0.08;
+    ctx.strokeStyle = '#8f7fd0';
+    ctx.strokeText('z', s / 2, s / 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('z', s / 2, s / 2);
+  });
 
   constructor(private scene: THREE.Scene) {}
 
@@ -91,6 +101,11 @@ export class FX {
   twinkle(pos: THREE.Vector3, up: THREE.Vector3) {
     const p = pos.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(0.18));
     this.spawn(this.star, SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)], p, up.clone().multiplyScalar(0.12), new THREE.Vector3(), 0.9, 0.07, 3);
+  }
+
+  zzz(pos: THREE.Vector3, up: THREE.Vector3) {
+    const side = new THREE.Vector3().randomDirection().multiplyScalar(0.04);
+    this.spawn(this.zTex, '#ffffff', pos.clone().add(side), up.clone().multiplyScalar(0.16).add(side), new THREE.Vector3(), 2.2, 0.1 + Math.random() * 0.05, 0.4);
   }
 
   berry(target: () => THREE.Vector3, up: () => THREE.Vector3, onLand: () => void) {

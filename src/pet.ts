@@ -65,7 +65,9 @@ export class Pet {
   selected = false;
   facing: THREE.Vector3 | null = null;
   moving = false;
+  sleeping = false;
   private lean = 0;
+  private sleepK = 0;
 
   constructor(public data: PetData) {
     this.up.set(...data.pos).normalize();
@@ -178,7 +180,7 @@ export class Pet {
   }
 
   private updateFace(): void {
-    const face = moodOf(this.data).face;
+    const face = this.sleeping ? 'flat' : moodOf(this.data).face;
     if (face === this.face) return;
     this.face = face;
     if (this.mouth) this.body.remove(this.mouth);
@@ -230,7 +232,7 @@ export class Pet {
   update(dt: number, time: number): void {
     const hungry = this.data.food < 25;
     this.moving = false;
-    if (this.evolving || this.selected) {
+    if (this.evolving || this.selected || this.sleeping) {
       this.target = null;
     } else if (this.target) {
       const toT = tmpV.copy(this.target).addScaledVector(this.up, -this.up.dot(this.target));
@@ -255,7 +257,8 @@ export class Pet {
 
     // Hop while walking, gentle breathing while idle, plus reaction overrides.
     let hop = 0;
-    let squash = Math.sin(time * 2.4 + this.phase) * 0.03;
+    this.sleepK += ((this.sleeping ? 1 : 0) - this.sleepK) * Math.min(1, dt * 3);
+    let squash = this.sleeping ? Math.sin(time * 1.3 + this.phase) * 0.05 - 0.06 : Math.sin(time * 2.4 + this.phase) * 0.03;
     if (this.moving) {
       this.phase += dt * 9;
       const s = Math.abs(Math.sin(this.phase));
@@ -300,11 +303,12 @@ export class Pet {
       lean = THREE.MathUtils.clamp((Math.PI / 2 - a) * 0.55, 0, 0.6);
     }
     this.lean += (lean - this.lean) * Math.min(1, dt * 6);
-    this.bob.rotation.set(-this.lean, spin + shake, 0);
+    // Sleepy pets nod forward a little.
+    this.bob.rotation.set(-this.lean + this.sleepK * 0.18, spin + shake, this.sleepK * Math.sin(time * 0.9 + this.phase) * 0.06);
     this.shadow.scale.setScalar(1 - Math.min(0.5, hop * 0.35));
 
     this.blink -= dt;
-    const eyeY = this.blink < 0.12 ? 0.15 : 1;
+    const eyeY = this.blink < 0.12 || this.sleepK > 0.5 ? 0.15 : 1;
     if (this.blink < 0) this.blink = 2.5 + Math.random() * 4;
     for (const e of this.eyes) e.scale.y = eyeY;
     for (const [i, w] of this.wings.entries()) w.rotation.y = Math.sin(time * 7 + this.phase) * 0.35 * (i === 0 ? 1 : -1);
