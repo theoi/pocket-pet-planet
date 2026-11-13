@@ -1,3 +1,5 @@
+import { cleanDiary, cleanFriendships, type DiaryEntry, type Friendships } from './friends';
+
 export type Species = 'mochi' | 'puff' | 'bloop' | 'sprout';
 export type Vec3 = [number, number, number];
 
@@ -25,13 +27,15 @@ export interface PetData {
   look?: Look;
   wear?: Wear;
   parents?: [string, string];
+  /** Parent pet ids (names can change); older babies only have names. */
+  parentIds?: [string, string];
 }
 
 export interface EggData {
   id: string;
   pos: Vec3;
   hatchAt: number;
-  baby: Pick<PetData, 'name' | 'species' | 'look' | 'parents'>;
+  baby: Pick<PetData, 'name' | 'species' | 'look' | 'parents' | 'parentIds'>;
 }
 
 export interface Game {
@@ -49,6 +53,10 @@ export interface Game {
   outfits?: string[];
   /** Collect-a-dex: entry id → when/where/who first discovered it. */
   dex?: Record<string, { at: number; by: string; where: string; backfilled?: boolean }>;
+  /** Friendship points per pair of pet ids. */
+  friends?: Friendships;
+  /** Little dated moments, oldest first, capped. */
+  diary?: DiaryEntry[];
 }
 
 interface SaveV1 {
@@ -62,8 +70,13 @@ interface SaveV2 extends Game {
   savedAt: number;
 }
 
-export interface SaveData extends Game {
+interface SaveV3 extends Game {
   version: 3;
+  savedAt: number;
+}
+
+export interface SaveData extends Game {
+  version: 4;
   savedAt: number;
   /** When the writing tab opened; the most recently opened tab owns the save. */
   claim?: number;
@@ -169,7 +182,7 @@ function isPet(x: unknown): x is PetData {
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
 /** Accepts v1 saves (pets only) and v2 saves, always returning a complete v2 game. */
-export function migrate(parsed: SaveV1 | SaveV2 | SaveData): (Game & { savedAt: number }) | null {
+export function migrate(parsed: SaveV1 | SaveV2 | SaveV3 | SaveData): (Game & { savedAt: number }) | null {
   if (!parsed || !Array.isArray(parsed.pets) || !parsed.pets.every(isPet) || parsed.pets.length === 0) return null;
   if (parsed.version === 1) {
     return {
@@ -181,9 +194,11 @@ export function migrate(parsed: SaveV1 | SaveV2 | SaveData): (Game & { savedAt: 
       lastEggAt: 0,
     };
   }
-  if (parsed.version === 2 || parsed.version === 3) {
+  if (parsed.version === 2 || parsed.version === 3 || parsed.version === 4) {
     parsed.pets.forEach(cleanWear);
-    const dex = parsed.version === 3 && parsed.dex && typeof parsed.dex === 'object' ? parsed.dex : undefined;
+    const ids = parsed.pets.map((p) => p.id);
+    const v4 = parsed.version === 4;
+    const dex = parsed.version >= 3 && parsed.dex && typeof parsed.dex === 'object' ? parsed.dex : undefined;
     return {
       savedAt: num(parsed.savedAt, Date.now()),
       pets: parsed.pets,
@@ -197,6 +212,9 @@ export function migrate(parsed: SaveV1 | SaveV2 | SaveData): (Game & { savedAt: 
         ? (parsed as SaveData).decor!.filter((x) => x && typeof x.id === 'string' && typeof x.kind === 'string' && Array.isArray(x.pos) && x.pos.length === 3)
         : undefined,
       outfits: Array.isArray((parsed as SaveData).outfits) ? (parsed as SaveData).outfits!.filter((x) => typeof x === 'string') : undefined,
+      // Undefined (not empty) tells the game this save predates friendships, so it can backfill family bonds.
+      friends: v4 ? cleanFriendships(parsed.friends, ids) : undefined,
+      diary: v4 ? cleanDiary(parsed.diary) : undefined,
     };
   }
   return null;
@@ -221,7 +239,7 @@ export function load(now = Date.now()): { data: Game; offlineMs: number; fresh: 
 }
 
 export function save(game: Game, claim?: number, now = Date.now()): void {
-  const data: SaveData = { version: 3, savedAt: now, claim, ...game };
+  const data: SaveData = { version: 4, savedAt: now, claim, ...game };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {

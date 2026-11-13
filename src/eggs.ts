@@ -33,7 +33,7 @@ export function makeBaby(a: PetData, b: PetData, used: string[], rng = Math.rand
   c.offsetHSL((rng() - 0.5) * 0.06, 0.04, 0.01);
   const look: Look = { color: '#' + c.getHexString(), feature };
   if (rng() < 0.45) look.spots = SPECIES[other.species].accent;
-  return { name: babyName(used, rng), species, look, parents: [a.name, b.name] };
+  return { name: babyName(used, rng), species, look, parents: [a.name, b.name], parentIds: [a.id, b.id] };
 }
 
 const eggGeo = new THREE.SphereGeometry(1, 24, 18);

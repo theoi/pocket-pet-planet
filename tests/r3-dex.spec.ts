@@ -87,5 +87,5 @@ test('older saves are backfilled quietly (no toast) and upgraded to v3', async (
   await expect(page.locator('.sticker[data-id="form:bloop:2"] .m')).toContainText('Recorded');
   await page.screenshot({ path: `${SHOTS}/r3-dex-backfilled.png` });
   await page.waitForTimeout(3500);
-  expect((await savedGame(page)).version).toBe(3);
+  expect((await savedGame(page)).version).toBe(4);
 });

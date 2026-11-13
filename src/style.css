@@ -295,7 +295,7 @@ body.decorating .title p { visibility: hidden; }
   .title p { font-size: 11px; }
   /* Icon-only buttons keep the top bar clear of the centred title. */
   .pill.play .lbl { display: none; }
-  .title { top: max(14px, env(safe-area-inset-top)); }
+  .title { top: max(44px, calc(env(safe-area-inset-top) + 32px)); }
   .topbar { gap: 5px; }
   .pill { padding: 5px 9px; }
   .title h1 { font-size: 18px; }
@@ -307,7 +307,7 @@ body.decorating .title p { visibility: hidden; }
   .deco-items .chip { flex-basis: 56px; padding: 4px 2px 3px; font-size: 9px; }
   /* No room for the title beside the top bar once the planet slides left. */
   body.panel-open .title { display: none; }
-  .toast { top: 54px; }
+  .toast { top: 90px; }
 }
 
 .stale {
@@ -315,3 +315,27 @@ body.decorating .title p { visibility: hidden; }
   background: var(--card); border-radius: 22px; padding: 16px 18px; text-align: center; font-weight: 700; font-size: 14px;
   box-shadow: 0 10px 30px rgba(130, 80, 150, 0.3); display: flex; flex-direction: column; gap: 10px; align-items: center;
 }
+
+/* --- friendships & diary --- */
+.friends-line { display: flex; align-items: center; gap: 6px; margin: -4px 0 6px; font-size: 12px; }
+.friends-line .lbl { color: var(--soft); font-weight: 700; flex: none; }
+.friends { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.friends .soft { color: var(--soft); font-size: 11px; }
+.friend {
+  border: 0; border-radius: 999px; padding: 2px 8px; font: inherit; font-size: 12px; font-weight: 800; color: var(--ink);
+  background: #fff0f7; cursor: pointer; box-shadow: 0 1px 0 #f3d4e4;
+}
+.friend .h, .pair .h { color: #ff7aa8; letter-spacing: 1px; }
+.pill .dot { display: inline-block; width: 7px; height: 7px; margin-left: 3px; border-radius: 50%; background: #ff7aa8; vertical-align: top; }
+.diary-card { display: flex; flex-direction: column; overflow: hidden; background-color: #fffaf3;
+  background-image: repeating-linear-gradient(transparent 0 27px, #f1e3ee 27px 28px); background-size: auto; }
+.diary-card .soft { color: var(--soft); font-size: 12px; }
+.pairs { display: grid; gap: 4px; }
+.pair { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; background: rgba(255, 255, 255, 0.8); border-radius: 12px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
+.pair i { color: var(--soft); font-size: 11px; font-style: normal; }
+.entries { overflow-y: auto; overscroll-behavior: contain; min-height: 0; flex: 1; margin-top: 6px; padding-right: 2px; }
+.entries h3 { position: sticky; top: 0; background: #fffaf3; margin: 10px 0 4px; padding: 2px 0; }
+.entry { display: grid; grid-template-columns: 42px 24px 1fr; gap: 4px; align-items: start; padding: 4px 2px; font-size: 14px; line-height: 1.35; }
+.entry .t { color: var(--soft); font-size: 11px; font-weight: 700; padding-top: 2px; }
+.entry .x { font-weight: 600; }
+.entry.new .t::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 3px; border-radius: 50%; background: #ff7aa8; vertical-align: middle; }

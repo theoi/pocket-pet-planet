@@ -24,6 +24,7 @@
     <div id="topbar" class="topbar">
       <span id="snacks" class="pill" title="Snacks from Fruit Catch">🍓 <b id="snackCount">0</b></span>
       <button id="dexBtn" class="pill play" aria-label="Sticker book">📖 <b id="dexCount">0</b></button>
+      <button id="diaryBtn" class="pill play" aria-label="Diary">📔<i id="diaryDot" class="dot hidden"></i></button>
       <button id="decoBtn" class="pill play" aria-pressed="false">🏡 <span class="lbl">Decorate</span></button>
       <button id="photoBtn" class="pill play" aria-label="Photo booth">📷</button>
       <button id="playBtn" class="pill play">🎮 <span class="lbl">Fruit Catch</span></button>
@@ -81,6 +82,16 @@
         <div id="dexMixes" class="dex-grid"></div>
       </div>
     </section>
+    <section id="diary" class="dex hidden" aria-label="Diary">
+      <div class="dex-card diary-card">
+        <button id="diaryClose" class="close" aria-label="Close diary">×</button>
+        <h2>📔 Planet Diary</h2>
+        <div id="diaryCount" class="soft"></div>
+        <h3>Friendships</h3>
+        <div id="diaryPairs" class="pairs"></div>
+        <div id="diaryEntries" class="entries"></div>
+      </div>
+    </section>
     <section id="game" class="game hidden">
       <canvas id="gameCanvas"></canvas>
       <div id="gameHud" class="game-hud"></div>
@@ -117,6 +128,7 @@
         <button type="submit" class="btn small">Save</button>
       </form>
       <div class="mood-line">Mood: <b id="moodLabel">Happy</b></div>
+      <div class="friends-line"><span class="lbl">Friends</span><div id="petFriends" class="friends"></div></div>
       <div class="bar"><span>Tummy</span><div class="track"><div id="foodBar" class="fill food"></div></div></div>
       <div class="bar"><span>Joy</span><div class="track"><div id="joyBar" class="fill joy"></div></div></div>
       <div class="bar"><span>Care</span><div class="track"><div id="careBar" class="fill care"></div></div></div>

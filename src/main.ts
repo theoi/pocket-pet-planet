@@ -17,6 +17,7 @@ import { DEX, dexEntry, entriesFor, formatWhen, regionName, sticker } from './de
 import { parseWeatherOverride, Weather } from './weather';
 import { buildWorld, R } from './world';
 import { FESTIVALS, festivalOf, fmtRange, parseDateOverride, SEASONS, seasonOf } from './seasons';
+import { and, befriend, dayLabel, friendsOf, heartsOf, levelOf, LEVELS, pairKey, writeDiary } from './friends';
 
 const HOUR = 3600_000;
 const debugMode = new URLSearchParams(location.search).has('debug');
@@ -287,10 +288,12 @@ scanDex(loaded.fresh ? 'quiet' : Object.keys(dex).length === 0 ? 'backfill' : 'l
 updateDexCount();
 
 // --- seasons & festivals -------------------------------------------------
+let welcomeGifts: string[] = [];
 {
   game.outfits ??= [];
   const gifts = giftsFor(season, festival?.id).filter((a) => !game.outfits!.includes(a.id));
   game.outfits.push(...gifts.map((a) => a.id));
+  welcomeGifts = gifts.map((a) => `${a.emoji} ${a.name}`);
   const badge = $('seasonBadge');
   badge.textContent = festival ? `${festival.emoji} ${festival.name}` : `${SEASONS[season].emoji} ${SEASONS[season].name}`;
   badge.title = festival ? `${festival.blurb} (${fmtRange(festival)})` : SEASONS[season].name;
@@ -303,6 +306,208 @@ updateDexCount();
   if (parts.length) setTimeout(() => toast(parts.join(' · ')), 900);
   if (gifts.length) persist();
 }
+// --- friendships & diary -------------------------------------------------
+const oldSave = !loaded.fresh && game.diary === undefined;
+game.friends ??= {};
+game.diary ??= [];
+const friends = game.friends;
+const diary = game.diary;
+const petById = (id: string) => pets.find((p) => p.data.id === id);
+let diarySeen = Number(localStorage.getItem('pocket-pet-planet:diarySeen')) || 0;
+function note(icon: string, text: string, key?: string): boolean {
+  if (!writeDiary(diary, { at: Date.now(), icon, text, key })) return false;
+  persist();
+  updateDiaryDot();
+  if (!$('diary').classList.contains('hidden')) renderDiary();
+  return true;
+}
+/** Like note(), but skips text already written within `withinMs` (so naps and visits don't flood the diary). */
+function noteNow(icon: string, text: string, withinMs: number): boolean {
+  const since = Date.now() - withinMs;
+  if (diary.some((e) => e.text === text && e.at > since)) return false;
+  return note(icon, text);
+}
+function updateDiaryDot() {
+  $('diaryDot').classList.toggle('hidden', !diary.some((e) => e.at > diarySeen));
+}
+const isFamily = (a: PetData, b: PetData) =>
+  !!(a.parentIds?.includes(b.id) || b.parentIds?.includes(a.id) || a.parents?.includes(b.name) || b.parents?.includes(a.name));
+const LEVEL_TEXT: Record<string, [string, string]> = { Pals: ['🤝', 'became pals'], Friends: ['🌼', 'are friends now'], 'Best friends': ['💞', 'became best friends'] };
+function friendGain(a: Pet, b: Pet, amount: number) {
+  const lvl = befriend(friends, a.data.id, b.data.id, amount);
+  if (!lvl) return;
+  const [icon, text] = LEVEL_TEXT[lvl.name];
+  note(icon, `${a.data.name} and ${b.data.name} ${text}`, `lvl:${pairKey(a.data.id, b.data.id)}:${lvl.name}`);
+  fx.hearts(a.headWorld(), a.up, 4);
+  fx.hearts(b.headWorld(), b.up, 4);
+  if (lvl.hearts >= 2) {
+    toast(`${icon} ${a.data.name} and ${b.data.name} ${text}!`);
+    sound.play('unlock');
+  }
+  if (selected === a || selected === b) refreshPanel();
+}
+{
+  const year = today().getFullYear();
+  const names = pets.map((p) => p.data.name);
+  if (loaded.fresh) note('🏡', `${and(names)} moved onto the planet`, 'start');
+  else if (oldSave) {
+    note('📔', `Started a diary for ${and(names)}`, 'start');
+    // Families already on the planet start out as friends.
+    for (const c of pets)
+      for (const p of pets) if (c !== p && isFamily(c.data, p.data) && (c.data.parentIds?.includes(p.data.id) || c.data.parents?.includes(p.data.name))) befriend(friends, c.data.id, p.data.id, 30);
+  }
+  const seasonYear = today().getMonth() < 2 ? year - 1 : year;
+  note(SEASONS[season].emoji, `${SEASONS[season].name} came to the planet`, `season:${season}:${seasonYear}`);
+  if (festival) note(festival.emoji, `The ${festival.name} began: ${festival.blurb.toLowerCase()}`, `fest:${festival.id}:${today().getMonth() === 0 ? year - 1 : year}`);
+  if (welcomeGifts.length) note('🎁', `Got ${and(welcomeGifts)} as a ${festival ? festival.name : SEASONS[season].name.toLowerCase()} gift`);
+  persist();
+}
+
+const seeks = new Map<Pet, { friend: Pet; until: number }>();
+function endSeek(p: Pet) {
+  if (!seeks.delete(p)) return;
+  p.goal = null;
+}
+/** Every 1.5 s of planet time: pets near each other grow closer, and best friends go and find each other. */
+function friendTick(now: number) {
+  for (let i = 0; i < pets.length; i++)
+    for (let j = i + 1; j < pets.length; j++) {
+      const a = pets[i], b = pets[j];
+      if (a.evolving || b.evolving) continue;
+      const va = visits.get(a), vb = visits.get(b);
+      let gain = 0;
+      if (va && vb && va.decor === vb.decor && va.arrived && vb.arrived) {
+        gain = va.kind === 'nap' ? 0.6 : 0.8;
+        const spot = DECOR_KINDS.find((k) => k.kind === va.decor.data.kind)!;
+        const where = spot.name.toLowerCase();
+        if (va.kind === 'nap') noteNow('😴', `${a.data.name} and ${b.data.name} napped together in the ${where}`, 3 * HOUR);
+        else noteNow(spot.emoji, `${a.data.name} and ${b.data.name} hung out by the ${where}`, 3 * HOUR);
+      } else {
+        const angle = a.up.angleTo(b.up);
+        if (angle < 0.35) gain = a.sleeping && b.sleeping ? 0.04 : a.sleeping || b.sleeping ? 0 : 0.08;
+      }
+      if (!gain) continue;
+      if (isFamily(a.data, b.data)) gain *= 1.5;
+      friendGain(a, b, gain);
+    }
+  for (const p of pets) {
+    if (seeks.has(p) || p === selected || p.goal || p.sleeping || p.evolving || visits.has(p) || courtship?.a === p || courtship?.b === p) continue;
+    const best = friendsOf(friends, p.data.id)[0];
+    const f = best && best.points >= LEVELS[0].min ? petById(best.id) : undefined;
+    if (!f || f.sleeping || f.evolving || seeks.get(f)?.friend === p || p.up.angleTo(f.up) < 0.6 || Math.random() > 0.12) continue;
+    seeks.set(p, { friend: f, until: now + 60_000 });
+  }
+}
+function seekFrame(now: number) {
+  for (const [p, s] of seeks) {
+    const f = s.friend;
+    if (!pets.includes(f) || p === selected || p.sleeping || now > s.until || visits.has(p)) {
+      endSeek(p);
+      continue;
+    }
+    if (p.up.angleTo(f.up) < 0.22) {
+      endSeek(p);
+      p.facing = f.group.position;
+      fx.hearts(p.headWorld(), p.up, 4);
+      fx.hearts(f.headWorld(), f.up, 3);
+      floater(p, `💞 ${f.data.name}!`);
+      friendGain(p, f, 1);
+      noteNow('💞', `${p.data.name} went looking for best friend ${f.data.name}`, 3 * HOUR);
+      continue;
+    }
+    const side = p.up.clone().addScaledVector(f.up, -f.up.dot(p.up));
+    if (side.lengthSq() < 1e-6) side.copy(f.forward);
+    p.goal = f.up.clone().addScaledVector(side.normalize(), 0.15).normalize();
+  }
+}
+
+function renderFriends(d: PetData) {
+  const list = friendsOf(friends, d.id)
+    .filter((f) => levelOf(f.points) && petById(f.id))
+    .slice(0, 3);
+  const sig = list.map((f) => `${f.id}:${heartsOf(f.points)}:${petById(f.id)!.data.name}`).join(',') + '|' + d.id;
+  const box = $('petFriends');
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  if (!list.length) {
+    box.innerHTML = '<span class="soft">No friends yet. Pets who play near each other become friends.</span>';
+    return;
+  }
+  box.replaceChildren(
+    ...list.map((f) => {
+      const p = petById(f.id)!;
+      const b = document.createElement('button');
+      b.className = 'friend';
+      b.dataset.id = f.id;
+      b.title = levelOf(f.points)!.name;
+      b.innerHTML = `<span class="fn"></span> <span class="h">${heartsOf(f.points)}</span>`;
+      b.querySelector('.fn')!.textContent = p.data.name;
+      b.addEventListener('click', () => select(p));
+      return b;
+    }),
+  );
+}
+
+function renderDiary() {
+  const pairs = Object.entries(friends)
+    .filter(([k, v]) => levelOf(v) && k.split('|').every((id) => petById(id)))
+    .sort((x, y) => y[1] - x[1])
+    .slice(0, 6);
+  const pairBox = $('diaryPairs');
+  pairBox.replaceChildren(
+    ...pairs.map(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'pair';
+      row.dataset.pair = k;
+      row.innerHTML = '<span></span><b class="h"></b><i></i>';
+      row.children[0].textContent = k.split('|').map((id) => petById(id)!.data.name).join(' & ');
+      row.children[1].textContent = heartsOf(v);
+      row.children[2].textContent = levelOf(v)!.name;
+      return row;
+    }),
+  );
+  if (!pairs.length) pairBox.innerHTML = '<p class="soft">No friendships yet. Pets who play near each other become friends.</p>';
+  const box = $('diaryEntries');
+  box.replaceChildren();
+  let day = '';
+  for (const e of [...diary].reverse()) {
+    const label = dayLabel(e.at);
+    if (label !== day) {
+      day = label;
+      const h = document.createElement('h3');
+      h.textContent = label;
+      box.append(h);
+    }
+    const row = document.createElement('div');
+    row.className = 'entry' + (e.at > diarySeen ? ' new' : '');
+    const t = new Date(e.at);
+    row.innerHTML = '<span class="t"></span><span class="i"></span><span class="x"></span>';
+    row.children[0].textContent = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    row.children[1].textContent = e.icon;
+    row.children[2].textContent = e.text;
+    box.append(row);
+  }
+  $('diaryCount').textContent = `${diary.length} ${diary.length === 1 ? 'page' : 'pages'} · newest first`;
+}
+$('diaryBtn').addEventListener('click', () => {
+  select(null);
+  renderDiary();
+  $('diary').classList.remove('hidden');
+  $('diaryEntries').scrollTop = 0;
+  diarySeen = Date.now();
+  localStorage.setItem('pocket-pet-planet:diarySeen', String(diarySeen));
+  updateDiaryDot();
+});
+const closeDiary = () => $('diary').classList.add('hidden');
+$('diaryClose').addEventListener('click', closeDiary);
+$('diary').addEventListener('click', (e) => {
+  if (e.target === $('diary')) closeDiary();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDiary();
+});
+updateDiaryDot();
+
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') persist();
@@ -345,6 +550,7 @@ function refreshPanel() {
   const fam = $('petFamily');
   fam.classList.toggle('hidden', !d.parents);
   if (d.parents) fam.textContent = `Child of ${d.parents[0]} & ${d.parents[1]}`;
+  renderFriends(d);
   $('moodEmoji').textContent = mood.emoji;
   $('moodLabel').textContent = mood.label;
   $('foodBar').style.width = `${d.food.toFixed(1)}%`;
@@ -394,6 +600,7 @@ function checkEvolve(pet: Pet) {
     fx.sparkles(pet.centerWorld(), pet.up, 45, 1.1);
     sound.play('evolve');
     floater(pet, `✨ ${formName(d)}! ✨`);
+    note('✨', `${d.name} evolved into ${formName(d)}`);
     refreshPanel();
     scanDex();
   });
@@ -562,6 +769,8 @@ function endCourtship() {
 }
 
 function startCourtship(a: Pet, b: Pet) {
+  endSeek(a);
+  endSeek(b);
   courtship = { a, b, started: performance.now() };
   fx.hearts(a.headWorld(), a.up, 3);
   fx.hearts(b.headWorld(), b.up, 3);
@@ -616,6 +825,8 @@ function layEgg(a: Pet, b: Pet) {
   const s = toScreen(egg.group.position.clone().addScaledVector(mid, 0.4));
   floatAt(s.x, s.y, '💞 An egg!');
   sound.play('egg');
+  befriend(friends, a.data.id, b.data.id, 15);
+  note('🥚', `${a.data.name} and ${b.data.name} found an egg`);
   persist();
 }
 
@@ -639,6 +850,8 @@ function hatch(egg: Egg) {
   fx.hearts(pet.headWorld(), pet.up, 5);
   floater(pet, `🐣 Meet ${d.name}!`);
   sound.play('hatch');
+  for (const p of pets) if (p !== pet && isFamily(d, p.data)) befriend(friends, d.id, p.data.id, 30);
+  note('🐣', d.parents ? `${d.name} hatched! Welcome, child of ${d.parents[0]} & ${d.parents[1]}` : `${d.name} hatched!`);
   persist();
   scanDex();
 }
@@ -915,7 +1128,13 @@ function visitTick(force = false) {
       continue;
     }
     if (!spots.length || p === selected || p.goal || p.evolving || p.sleeping || (!force && Math.random() > 0.12)) continue;
-    const near = spots.map((d) => ({ d, a: p.up.angleTo(new THREE.Vector3(...d.data.pos)) })).filter((x) => x.a < 1.1).sort((a, b) => a.a - b.a)[0];
+    // Friends like to share: head for a spot a friend is already visiting if it's in reach.
+    const pals = new Set(friendsOf(friends, p.data.id).filter((f) => f.points >= LEVELS[1].min).map((f) => f.id));
+    const shared = (d: Decor) => [...visits].some(([q, v]) => v.decor === d && pals.has(q.data.id));
+    const near = spots
+      .map((d) => ({ d, a: p.up.angleTo(new THREE.Vector3(...d.data.pos)) - (shared(d) ? 0.8 : 0) }))
+      .filter((x) => x.a < 1.1)
+      .sort((a, b) => a.a - b.a)[0];
     if (near && [...visits.values()].filter((x) => x.decor === near.d).length < 2) {
       startVisit(p, near.d);
       if (force) return;
@@ -928,6 +1147,8 @@ function visitFrame(now: number) {
       v.arrived = now;
       v.until = now + (v.kind === 'nap' ? 20_000 + Math.random() * 15_000 : 12_000 + Math.random() * 8_000);
       if (v.kind === 'hang') fx.hearts(p.headWorld(), p.up, 3);
+      else if (![...visits].some(([q, w]) => q !== p && w.decor === v.decor))
+        noteNow('😴', `${p.data.name} took a nap in the ${DECOR_KINDS.find((k) => k.kind === v.decor.data.kind)!.name.toLowerCase()}`, 6 * HOUR);
     }
   }
 }
@@ -1205,6 +1426,9 @@ window.__ppp = {
   __sound: sound,
   saving: () => !resetting,
   dex: () => ({ ...dex }),
+  friends: () => ({ ...friends }),
+  diary: () => diary.map((e) => ({ ...e })),
+  seeks: () => [...seeks].map(([p, s]) => ({ pet: p.data.id, friend: s.friend.data.id })),
   booth: () => (booth ? { frame: booth.card.frame, stickers: booth.card.stickers.map((s) => ({ ...s })), size: cardSize(booth.card.photo), last: lastPostcard } : { last: lastPostcard }),
   decor: () =>
     decorList.map((d) => ({ ...d.data, screen: toScreen(d.group.position.clone().addScaledVector(d.group.position.clone().normalize(), 0.06)), visible: d.group.position.dot(camera.position) > 2.2, selected: d === selDecor })),
@@ -1301,8 +1525,10 @@ renderer.setAnimationLoop(() => {
     breedTimer = 1.5;
     breedTick();
     visitTick();
+    friendTick(now);
   }
   visitFrame(now);
+  seekFrame(now);
   for (const d of decorList)
     for (const g of d.glow) {
       g.material.opacity = dayNight.night * 0.9;

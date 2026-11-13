@@ -93,7 +93,7 @@ test('a v1 save (before babies/hats/snacks) loads and upgrades cleanly', async (
   expect(g.snacks).toBe(0);
   await page.waitForTimeout(3500);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-pet-planet:v1')!));
-  expect(saved.version).toBe(3);
+  expect(saved.version).toBe(4);
   expect(saved.pets.map((p: any) => p.id)).toEqual(['old1', 'old2']);
   expect(errors).toEqual([]);
 });
