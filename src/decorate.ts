@@ -57,10 +57,14 @@ function model(kind: DecorKind): { g: THREE.Group; glowAt?: V3[]; top: number } 
       g.add(p(box, '#c99a7a', [0, 0.045, 0.066], [0.04, 0.07, 0.006]));
       for (const s of [-1, 1]) g.add(p(box, windowMat, [0.05 * s, 0.085, 0.066], [0.03, 0.03, 0.006]));
       // Seen from above only the roof shows, so a dark chimney and stepping-stone path make it read as a house.
+      g.add(p(cone4, '#d9707f', [0, 0.145, 0], [0.16, 0.035, 0.14], [0, Math.PI / 4, 0]));
+      g.add(p(cone4, '#d9707f', [0, 0.235, 0], [0.045, 0.04, 0.04], [0, Math.PI / 4, 0]));
       g.add(p(box, '#c99a7a', [0.05, 0.22, -0.025], [0.03, 0.1, 0.03]));
       g.add(p(box, '#8e6a5a', [0.05, 0.273, -0.025], [0.04, 0.012, 0.04]));
-      for (const z of [0.1, 0.14, 0.18]) g.add(p(cyl, '#e8d5c4', [0, 0.003, z], [0.022, 0.006, 0.022]));
-      return { g, glowAt: [[0, 0.085, 0.09]], top: 0.28 };
+      g.add(p(sphere, '#ffffff', [0.055, 0.31, -0.03], [0.022, 0.018, 0.022]));
+      g.add(p(sphere, '#ffffff', [0.07, 0.34, -0.035], [0.016, 0.013, 0.016]));
+      for (const z of [0.1, 0.145, 0.19]) g.add(p(cyl, '#d8c3a5', [0, 0.003, z], [0.026, 0.006, 0.026]));
+      return { g, glowAt: [[0, 0.085, 0.09]], top: 0.3 };
     }
     case 'shroomhouse': {
       g.add(p(cyl, '#fff4e6', [0, 0.07, 0], [0.065, 0.14, 0.065]));
