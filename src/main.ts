@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import './style.css';
 import { FX } from './fx';
 import { Pet } from './pet';
+import { accessoryById, ACCESSORIES, unlockedAt } from './accessories';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
 import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
@@ -65,9 +66,67 @@ const persist = () => {
   save(game);
 };
 const addCare = (d: PetData, amount: number) => {
+  const before = unlockedAt(game.totalCare).length;
   d.care += amount;
   game.totalCare += amount;
+  const now = unlockedAt(game.totalCare);
+  if (now.length > before) {
+    const a = now[now.length - 1];
+    toast(`New outfit unlocked: ${a.emoji} ${a.name}!`);
+    renderWardrobe();
+  }
 };
+
+function toast(text: string) {
+  const el = document.getElementById('toast')!;
+  el.textContent = text;
+  el.classList.remove('hidden');
+  // Restart the CSS animation for back-to-back toasts.
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => el.classList.add('hidden'), 3300);
+}
+let toastTimer = 0;
+
+function renderWardrobe() {
+  const box = document.getElementById('wardrobeItems')!;
+  if (!selected || document.getElementById('wardrobe')!.classList.contains('hidden')) return;
+  const wear = selected.data.wear ?? {};
+  box.replaceChildren(
+    ...ACCESSORIES.map((a) => {
+      const b = document.createElement('button');
+      const unlocked = game.totalCare >= a.unlock;
+      const on = wear[a.slot] === a.id;
+      b.className = 'chip' + (on ? ' on' : '');
+      b.dataset.id = a.id;
+      b.disabled = !unlocked;
+      b.title = unlocked ? a.name : `Unlocks at ${a.unlock} care`;
+      b.innerHTML = `<span class="e">${unlocked ? a.emoji : '🔒'}</span><span>${unlocked ? a.name : `${a.unlock} care`}</span>`;
+      b.addEventListener('click', () => toggleWear(a.id));
+      return b;
+    }),
+  );
+  const next = ACCESSORIES.find((a) => game.totalCare < a.unlock);
+  document.getElementById('wardrobeNote')!.textContent = `Planet care: ${Math.floor(game.totalCare)} ✨ ${next ? `· next unlock at ${next.unlock}` : '· everything unlocked!'}`;
+}
+
+function toggleWear(id: string) {
+  const a = accessoryById(id);
+  if (!selected || !a || game.totalCare < a.unlock) return;
+  const d = selected.data;
+  d.wear = { ...d.wear };
+  if (d.wear[a.slot] === id) delete d.wear[a.slot];
+  else {
+    d.wear[a.slot] = id;
+    fx.sparkles(selected.headWorld(), selected.up, 10, 0.4);
+    selected.react('pet');
+  }
+  selected.build();
+  persist();
+  renderWardrobe();
+}
 persist();
 setInterval(persist, 3000);
 window.addEventListener('pagehide', persist);
@@ -137,6 +196,7 @@ function select(pet: Pet | null) {
   if (selected) selected.facing = null;
   selected = pet;
   renameForm.classList.add('hidden');
+  $('wardrobe').classList.add('hidden');
   if (pet) {
     pet.setSelected(true);
     panel.classList.remove('hidden');
@@ -208,6 +268,11 @@ function cuddle(pet: Pet) {
 $('feedBtn').addEventListener('click', () => selected && feed(selected));
 $('petBtn').addEventListener('click', () => selected && cuddle(selected));
 $('close').addEventListener('click', () => select(null));
+$('wearBtn').addEventListener('click', () => {
+  $('wardrobe').classList.toggle('hidden');
+  renameForm.classList.add('hidden');
+  renderWardrobe();
+});
 $('renameBtn').addEventListener('click', () => {
   if (!selected) return;
   renameForm.classList.toggle('hidden');
@@ -429,6 +494,7 @@ window.__ppp = {
       sleeping: p.sleeping,
       look: p.data.look,
       parents: p.data.parents,
+      wear: p.data.wear ?? {},
       evolving: p.evolving,
       visible: facesCamera(p),
       screen: toScreen(p.centerWorld()),
@@ -437,7 +503,11 @@ window.__ppp = {
   sky: () => ({ hour: dayNight.hour, night: dayNight.night, fireflies: dayNight.fireflyOpacity }),
   selected: () => selected?.data.id ?? null,
   /** Point the camera at a pet or egg by id (tests and screenshots). */
-  focus: (id: string, distance = 6.2) => {
+  focus: (id: string | number[], distance = 6.2) => {
+    if (Array.isArray(id)) {
+      camera.position.fromArray(id).normalize().multiplyScalar(distance);
+      return;
+    }
     const up = pets.find((p) => p.data.id === id)?.up ?? eggs.find((e) => e.data.id === id)?.up;
     if (!up) return;
     // Look from slightly "south" of the target so creatures are seen from the front-ish, not top-down.
@@ -446,6 +516,7 @@ window.__ppp = {
     camera.position.copy(up).addScaledVector(south.normalize(), -0.22).normalize().multiplyScalar(distance);
   },
   eggs: () => eggs.map((e) => ({ ...e.data, screen: toScreen(e.group.position) })),
+  unlocked: () => unlockedAt(game.totalCare).map((a) => a.id),
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve } : {}),
 };

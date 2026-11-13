@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildAccessory } from './accessories';
 import { moodOf, SPECIES, type Mood, type PetData } from './state';
 import { toon } from './toon';
 import { R } from './world';
@@ -185,7 +186,12 @@ export class Pet {
         b.add(wing);
         this.wings.push(wing);
       }
-      b.add(mesh(new THREE.TorusGeometry(0.36, 0.06, 10, 36), toon('#ffe08a'), [0, top + 0.2, 0], [1, 1, 1], [Math.PI / 2, 0, 0]));
+      // A hat would poke through the halo, so the halo politely steps aside.
+      if (!this.data.wear?.head) b.add(mesh(new THREE.TorusGeometry(0.36, 0.06, 10, 36), toon('#ffe08a'), [0, top + 0.2, 0], [1, 1, 1], [Math.PI / 2, 0, 0]));
+    }
+    for (const id of [this.data.wear?.head, this.data.wear?.neck]) {
+      const acc = id ? buildAccessory(id, SPECIES[feat].accent) : null;
+      if (acc) b.add(acc);
     }
     this.group.userData.top = top;
     this.updateFace();

@@ -16,6 +16,7 @@
     <div id="clock" class="clock"></div>
     <div id="tag" class="tag hidden"></div>
     <div id="floaters"></div>
+    <div id="toast" class="toast hidden"></div>
     <section id="panel" class="panel hidden" aria-live="polite">
       <button id="close" class="close" aria-label="Close">×</button>
       <div class="row head">
@@ -38,7 +39,12 @@
       <div class="row actions">
         <button id="feedBtn" class="btn">🍓 Feed</button>
         <button id="petBtn" class="btn">💗 Pet</button>
-        <button id="renameBtn" class="btn">✏️ Rename</button>
+        <button id="wearBtn" class="btn">👒 Wear</button>
+        <button id="renameBtn" class="btn">✏️ Name</button>
+      </div>
+      <div id="wardrobe" class="wardrobe hidden">
+        <div id="wardrobeItems" class="wardrobe-items"></div>
+        <div id="wardrobeNote" class="care-note"></div>
       </div>
     </section>
     <section id="debug" class="debug hidden">

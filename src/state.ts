@@ -139,6 +139,10 @@ export function defaultSave(): Game {
   return { pets, eggs: [], snacks: 0, totalCare: 0, lastEggAt: 0 };
 }
 
+function cleanWear(p: PetData): void {
+  if (p.wear && typeof p.wear !== 'object') delete p.wear;
+}
+
 function isPet(x: unknown): x is PetData {
   const p = x as PetData;
   return !!p && typeof p.id === 'string' && typeof p.name === 'string' && p.species in SPECIES &&
@@ -162,6 +166,7 @@ export function migrate(parsed: SaveV1 | SaveData): (Game & { savedAt: number })
     };
   }
   if (parsed.version === 2) {
+    parsed.pets.forEach(cleanWear);
     return {
       savedAt: num(parsed.savedAt, Date.now()),
       pets: parsed.pets,

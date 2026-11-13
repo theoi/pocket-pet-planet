@@ -67,6 +67,10 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
   border: 2px solid rgba(255, 255, 255, 0.9);
   animation: pop 0.25s cubic-bezier(.3, 1.6, .5, 1);
 }
+@media (min-width: 900px) {
+  .panel { left: 20px; transform: none; animation-name: pop-side; }
+}
+@keyframes pop-side { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes pop { from { transform: translateX(-50%) scale(0.85); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 .row { display: flex; align-items: center; gap: 10px; }
 .head { margin-bottom: 6px; }
@@ -101,6 +105,31 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
 }
 .rename input:focus { border-color: var(--pink); }
 
+.actions .btn { padding: 10px 2px; font-size: 13px; }
+.wardrobe { margin-top: 10px; }
+.wardrobe-items {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
+.wardrobe-items .chip { flex: 0 0 64px; scroll-snap-align: start; }
+.chip {
+  border: 2px solid transparent; border-radius: 14px; background: #fff; padding: 6px 2px 4px; font: inherit;
+  font-size: 10px; font-weight: 700; color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  box-shadow: 0 2px 0 #eadcf0;
+}
+.chip .e { font-size: 20px; line-height: 1.1; }
+.chip.on { border-color: var(--pink); background: #fff0f7; }
+.chip:disabled { opacity: 0.45; cursor: default; filter: grayscale(0.6); }
+.toast {
+  position: fixed; left: 50%; top: 84px; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px;
+  background: #fff; color: var(--ink); font-weight: 800; font-size: 14px; box-shadow: 0 6px 18px rgba(130, 80, 150, 0.3);
+  animation: toast 3.2s ease forwards; pointer-events: none; white-space: nowrap;
+}
+@keyframes toast {
+  0% { opacity: 0; transform: translate(-50%, -10px) scale(0.9); }
+  10%, 85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
 .debug {
   position: fixed; top: 8px; left: 8px; display: flex; gap: 4px; align-items: center; font-size: 11px;
   background: rgba(255, 255, 255, 0.7); padding: 4px 6px; border-radius: 10px;
