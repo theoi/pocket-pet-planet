@@ -17,6 +17,31 @@
     <div id="tag" class="tag hidden"></div>
     <div id="floaters"></div>
     <div id="toast" class="toast hidden"></div>
+    <div id="topbar" class="topbar">
+      <span id="snacks" class="pill" title="Snacks from Fruit Catch">🍓 <b id="snackCount">0</b></span>
+      <button id="playBtn" class="pill play">🎮 Fruit Catch</button>
+    </div>
+    <section id="game" class="game hidden">
+      <canvas id="gameCanvas"></canvas>
+      <div id="gameHud" class="game-hud"></div>
+      <button id="gameClose" class="close game-close" aria-label="Back to planet">×</button>
+      <div id="gameIntro" class="game-card">
+        <h2 id="gameTitle">Fruit Catch</h2>
+        <p>Slide left and right to catch falling fruit. Drag, tap, or use the arrow keys. ⭐ is worth 3, and every 5 in a row is a bonus!</p>
+        <p class="soft">30 seconds · every 3 points earn a snack 🍓 (up to 10)</p>
+        <button id="gameStart" class="btn">Start!</button>
+      </div>
+      <div id="gameEnd" class="game-card hidden">
+        <h2 id="gameResult">Nice!</h2>
+        <p id="gameScore" class="soft"></p>
+        <p id="gameReward" class="reward"></p>
+        <p class="soft">Give snacks as treats from a pet's panel.</p>
+        <div class="row">
+          <button id="gameAgain" class="btn">Play again</button>
+          <button id="gameDone" class="btn">Back to planet</button>
+        </div>
+      </div>
+    </section>
     <section id="panel" class="panel hidden" aria-live="polite">
       <button id="close" class="close" aria-label="Close">×</button>
       <div class="row head">
@@ -36,11 +61,12 @@
       <div class="bar"><span>Joy</span><div class="track"><div id="joyBar" class="fill joy"></div></div></div>
       <div class="bar"><span>Care</span><div class="track"><div id="careBar" class="fill care"></div></div></div>
       <div id="careNote" class="care-note"></div>
-      <div class="row actions">
-        <button id="feedBtn" class="btn">🍓 Feed</button>
-        <button id="petBtn" class="btn">💗 Pet</button>
-        <button id="wearBtn" class="btn">👒 Wear</button>
-        <button id="renameBtn" class="btn">✏️ Name</button>
+      <div class="actions">
+        <button id="feedBtn" class="btn"><span class="e">🍎</span>Feed</button>
+        <button id="treatBtn" class="btn"><span class="e">🍓</span>Treat <span id="treatCount"></span></button>
+        <button id="petBtn" class="btn"><span class="e">💗</span>Pet</button>
+        <button id="wearBtn" class="btn"><span class="e">👒</span>Wear</button>
+        <button id="renameBtn" class="btn"><span class="e">✏️</span>Name</button>
       </div>
       <div id="wardrobe" class="wardrobe hidden">
         <div id="wardrobeItems" class="wardrobe-items"></div>

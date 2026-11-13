@@ -7,6 +7,8 @@ import { accessoryById, ACCESSORIES, unlockedAt } from './accessories';
 import { BREED_FOOD, BREED_JOY, Egg, EGG_COOLDOWN_MS, EGG_HATCH_MS, makeBaby, POPULATION_CAP } from './eggs';
 import { clearSave, decay, formName, load, MAX_STAGE, moodOf, save, STAGE_CARE, type PetData } from './state';
 import { DayNight, parseTimeOverride } from './daynight';
+import { colorOf, featureOf } from './eggs';
+import { FruitCatch } from './minigame';
 import { buildWorld } from './world';
 
 const HOUR = 3600_000;
@@ -248,6 +250,63 @@ function feed(pet: Pet) {
   refreshPanel();
 }
 
+function treat(pet: Pet) {
+  const d = pet.data;
+  if (pet.evolving || game.snacks <= 0) return;
+  game.snacks -= 1;
+  wake(pet);
+  d.food = Math.min(100, d.food + 35);
+  d.joy = Math.min(100, d.joy + 18);
+  addCare(d, 1.5);
+  persist();
+  updateSnacks();
+  fx.berry(
+    () => pet.headWorld().addScaledVector(pet.up, -pet.size * 0.4),
+    () => pet.up,
+    () => {
+      pet.react('feed');
+      fx.hearts(pet.headWorld(), pet.up, 8);
+      fx.sparkles(pet.headWorld(), pet.up, 8, 0.3);
+      floater(pet, 'Sweet treat! ✨');
+      refreshPanel();
+      checkEvolve(pet);
+    },
+  );
+}
+
+function updateSnacks() {
+  $('snackCount').textContent = String(game.snacks);
+  $('treatCount').textContent = game.snacks > 0 ? `(${game.snacks})` : '';
+  ($('treatBtn') as HTMLButtonElement).disabled = game.snacks <= 0;
+}
+updateSnacks();
+
+// --- mini-game -----------------------------------------------------------
+let miniGame: FruitCatch | null = null;
+function openMiniGame() {
+  if (miniGame) return;
+  const pet = selected ?? [...pets].sort((a, b) => b.data.joy - a.data.joy)[0];
+  const d = pet.data;
+  select(null);
+  miniGame = new FruitCatch(
+    { name: d.name, color: colorOf(d), feature: featureOf(d) },
+    (score) => {
+      game.snacks += score;
+      d.joy = Math.min(100, d.joy + 15);
+      wake(pet);
+      persist();
+      updateSnacks();
+    },
+    () => {
+      miniGame = null;
+      clock.getDelta();
+      pet.react('feed');
+      fx.hearts(pet.headWorld(), pet.up, 5);
+    },
+  );
+}
+$('playBtn').addEventListener('click', openMiniGame);
+
 const lastPetAt = new WeakMap<Pet, number>();
 function cuddle(pet: Pet) {
   const d = pet.data;
@@ -266,6 +325,7 @@ function cuddle(pet: Pet) {
 }
 
 $('feedBtn').addEventListener('click', () => selected && feed(selected));
+$('treatBtn').addEventListener('click', () => selected && treat(selected));
 $('petBtn').addEventListener('click', () => selected && cuddle(selected));
 $('close').addEventListener('click', () => select(null));
 $('wearBtn').addEventListener('click', () => {
@@ -517,6 +577,7 @@ window.__ppp = {
   },
   eggs: () => eggs.map((e) => ({ ...e.data, screen: toScreen(e.group.position) })),
   unlocked: () => unlockedAt(game.totalCare).map((a) => a.id),
+  minigame: () => miniGame?.state() ?? null,
   game: () => ({ snacks: game.snacks, totalCare: game.totalCare, lastEggAt: game.lastEggAt, population: population(), courting: !!courtship }),
   ...(debugMode ? { fastForward, evolve: debugEvolve } : {}),
 };
@@ -552,6 +613,11 @@ function adaptQuality(raw: number) {
 
 renderer.setAnimationLoop(() => {
   const raw = clock.getDelta();
+  if (miniGame) {
+    // The planet sleeps behind the mini-game overlay; needs still tick so time stays honest.
+    for (const p of pets) decay(p.data, raw * 1000);
+    return;
+  }
   adaptQuality(raw);
   const dt = Math.min(0.1, raw);
   const t = clock.elapsedTime;
