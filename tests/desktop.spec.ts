@@ -35,8 +35,8 @@ test('dragging rotates the planet view and scrolling zooms', async ({ page }) =>
   expect(d1).toBeLessThan(d0 - 0.5);
 });
 
-test('creatures wander on their own', async ({ page }) => {
-  await freshStart(page);
+test('creatures wander on their own (daytime; they sleep at night)', async ({ page }) => {
+  await freshStart(page, '?time=12:00');
   const a = await pets(page);
   await page.waitForTimeout(8000);
   const b = await pets(page);
