@@ -794,7 +794,23 @@ function decorAt(x: number, y: number): Decor | null {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects([world.planet, ...decorList.map((d) => d.hit)], false);
-  return (hits[0]?.object.userData.decor as Decor | undefined) ?? null;
+  const hit = hits[0]?.object.userData.decor as Decor | undefined;
+  if (hit) return hit;
+  // Near the planet's rim the ray grazes the ground before it reaches a decoration's hit sphere, so
+  // fall back to the nearest camera-facing decoration on screen.
+  let best: Decor | null = null;
+  let bestD = 30;
+  for (const d of decorList) {
+    const n = new THREE.Vector3(...d.data.pos).normalize();
+    if (n.dot(camera.position.clone().normalize()) < 0.05) continue;
+    const s = toScreen(n.clone().multiplyScalar(R + 0.12));
+    const dist = Math.hypot(s.x - x, s.y - y);
+    if (dist < bestD) {
+      bestD = dist;
+      best = d;
+    }
+  }
+  return best;
 }
 
 function placeDecor(kind: DecorKind, n: THREE.Vector3) {
@@ -1191,7 +1207,7 @@ window.__ppp = {
   dex: () => ({ ...dex }),
   booth: () => (booth ? { frame: booth.card.frame, stickers: booth.card.stickers.map((s) => ({ ...s })), size: cardSize(booth.card.photo), last: lastPostcard } : { last: lastPostcard }),
   decor: () =>
-    decorList.map((d) => ({ ...d.data, screen: toScreen(d.group.position.clone().addScaledVector(d.group.position.clone().normalize(), 0.06)), visible: d.group.position.dot(camera.position) > 2.2 })),
+    decorList.map((d) => ({ ...d.data, screen: toScreen(d.group.position.clone().addScaledVector(d.group.position.clone().normalize(), 0.06)), visible: d.group.position.dot(camera.position) > 2.2, selected: d === selDecor })),
   probe: (x: number, y: number) => {
     const n = surfacePoint(x, y);
     return n ? { hit: true, problem: spotProblem(n, world.ponds, decorList) } : { hit: false, problem: null };

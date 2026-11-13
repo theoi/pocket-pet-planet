@@ -25,8 +25,9 @@ html, body {
 #app canvas:active { cursor: grabbing; }
 .hidden { display: none !important; }
 
+/* Sits below the top bar so long button labels never run into it. */
 .title {
-  position: fixed; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0;
+  position: fixed; top: max(50px, calc(env(safe-area-inset-top) + 42px)); left: 0; right: 0;
   text-align: center; pointer-events: none;
 }
 .title h1 {
@@ -36,11 +37,11 @@ html, body {
 .title p { margin: 4px 0 0; font-size: 13px; color: #fff; opacity: 0.9; text-shadow: 0 1px 4px rgba(120, 70, 140, 0.4); }
 
 .clock {
-  position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; padding: 4px 10px; border-radius: 999px;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
   background: rgba(255, 255, 255, 0.55); font-size: 13px; font-weight: 800; color: var(--ink); pointer-events: none;
 }
 .season-badge {
-  position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 30px); right: 12px; padding: 3px 10px; border-radius: 999px; border: 0;
+  padding: 3px 10px; border-radius: 999px; border: 0; white-space: nowrap;
   background: rgba(255, 255, 255, 0.55); font: inherit; font-size: 12px; font-weight: 800; color: var(--ink); cursor: pointer;
 }
 body.is-night .season-badge { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
@@ -131,7 +132,7 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
 .chip.on { border-color: var(--pink); background: #fff0f7; }
 .chip:disabled { opacity: 0.45; cursor: default; filter: grayscale(0.6); }
 .toast {
-  position: fixed; left: 50%; top: 84px; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px;
+  position: fixed; left: 50%; top: 112px; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px;
   background: #fff; color: var(--ink); font-weight: 800; font-size: 14px; box-shadow: 0 6px 18px rgba(130, 80, 150, 0.3);
   animation: toast 3.2s ease forwards; pointer-events: none; white-space: nowrap;
 }
@@ -140,8 +141,18 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
   10%, 85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -6px); }
 }
-.topbar {
-  position: fixed; left: 12px; top: max(12px, env(safe-area-inset-top)); display: flex; gap: 6px; z-index: 2;
+/* The clock column never shrinks; the buttons wrap onto a second row instead of sliding under it. */
+.hud-top {
+  position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top));
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; z-index: 2; pointer-events: none;
+}
+.topbar { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 1 auto; min-width: 0; pointer-events: auto; }
+.hud-right { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.season-badge { pointer-events: auto; }
+.pill { white-space: nowrap; }
+@media (max-width: 420px) {
+  .topbar { gap: 5px; }
+  .pill { padding: 5px 9px; }
 }
 .pill {
   border: 0; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink);
@@ -152,6 +163,7 @@ body.is-night .clock { background: rgba(60, 50, 110, 0.55); color: #f3eaff; }
 body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
 @media (max-width: 560px) {
   .title { top: max(74px, calc(env(safe-area-inset-top) + 66px)); }
+  .toast { top: 126px; }
 }
 .actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .actions .btn { padding: 8px 2px; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; }
@@ -215,7 +227,9 @@ body.is-night .pill { background: rgba(60, 50, 110, 0.6); color: #f3eaff; }
 .deco-items { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
 .deco-items .chip { flex: 0 0 62px; }
 .deco-sel { grid-column: 1 / -1; display: flex; gap: 8px; }
-.deco-done { align-self: stretch; }
+/* Pinned beside the items so showing Turn/Remove adds one row, not two. */
+.deco-done { align-self: stretch; grid-column: 2; grid-row: 2; }
+.deco-sel { grid-row: 3; }
 body.decorating .title p { visibility: hidden; }
 
 .booth {
@@ -276,8 +290,19 @@ body.decorating .title p { visibility: hidden; }
   .wardrobe { margin-top: 6px; }
   .wardrobe-items .chip { flex-basis: 54px; padding: 4px 2px 3px; }
   .chip .e { font-size: 16px; }
-  .title h1 { font-size: 20px; }
   .title p { font-size: 11px; }
+  /* Icon-only buttons keep the top bar clear of the centred title. */
+  .pill.play .lbl { display: none; }
+  .title { top: max(14px, env(safe-area-inset-top)); }
+  .topbar { gap: 5px; }
+  .pill { padding: 5px 9px; }
+  .title h1 { font-size: 18px; }
+  /* Short screens: Turn/Remove share the hint's row so the tray stays low. */
+  .deco-tray { padding: 8px 10px; row-gap: 6px; width: min(640px, calc(100vw - 20px)); }
+  .deco-done { justify-self: end; min-width: 96px; }
+  .deco-hint { grid-column: 1; grid-row: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .deco-sel { grid-column: 2; grid-row: 1; gap: 6px; }
+  .deco-items .chip { flex-basis: 56px; padding: 4px 2px 3px; font-size: 9px; }
   /* No room for the title beside the top bar once the planet slides left. */
   body.panel-open .title { display: none; }
   .toast { top: 54px; }
